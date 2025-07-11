@@ -48,10 +48,10 @@ export class User {
   })
   socialLinks: { title: string; url: string }[];
 
-  @Prop({ type: Date })
+  @Prop({ type: Date, default: null })
   birthdate: Date;
 
-  @Prop({ type: String, enum: Gender })
+  @Prop({ type: String, enum: Gender, default: null })
   gender: Gender;
 
   @Prop({ type: String, enum: UserRole, default: UserRole.USER })

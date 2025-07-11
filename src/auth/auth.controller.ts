@@ -40,7 +40,7 @@ export class AuthController {
   @ApiOkResponse({ description: 'Returns full user profile' })
   @ApiUnauthorizedResponse({ description: 'Unauthorized - Invalid token' })
   async getProfile(@Req() req: Request & { user: any }) {
-    const userId = req.user?.sub;
+    const userId: string = req.user?.sub;
     const user = await this.authService.getProfileById(userId);
 
     return {
