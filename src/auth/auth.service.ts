@@ -40,12 +40,21 @@ export class AuthService {
 
     const savedUser = await createdUser.save();
 
+    // Generate JWT
+    const payload = {
+      sub: savedUser._id,
+      email: savedUser.email,
+      role: savedUser.role,
+    };
+    const token = await this.jwtService.signAsync(payload);
+
     // Remove password before returning
     const { password: _, ...userWithoutPassword } = savedUser.toObject();
 
     return {
       message: 'User registered successfully',
       user: userWithoutPassword,
+      token,
     };
   }
 
