@@ -22,6 +22,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
+import { from } from 'rxjs';
 
 @ApiTags('Auth')
 @ApiBearerAuth()
@@ -48,15 +49,31 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
   async login(@Body() loginDto: LoginDto) {
     this.logger.log(`LoginDto ${JSON.stringify(loginDto)}`);
+
+    //    userId: string;
+    // content: string;
+    // type: string;
+    // data: Record<string, unknown>;
+    // fromUserId?: string;
+
+    //  message: 'Login successful',
+    //   user: userWithoutPassword,
+    //   token,
     try {
       await this.client.connect();
-      this.client.emit('user.login', { email: loginDto.email });
+      const response = await this.authService.login(loginDto);
+      this.client.emit('user.login', {
+        userId: response.user._id,
+        content: response.message,
+        type: 'user',
+        data: response.user,
+        fromUserId: response.user._id,
+      });
       this.logger.log(`✅ Emitted user.login event for: ${loginDto.email}`);
+      return response;
     } catch (error) {
       this.logger.error(`❌ Failed to emit user.login event: ${error}`);
     }
-
-    return this.authService.login(loginDto);
   }
 
   @Get('profile')
