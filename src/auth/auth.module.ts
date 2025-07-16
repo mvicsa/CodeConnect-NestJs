@@ -7,9 +7,12 @@ import { User, UserSchema } from 'src/users/shemas/user.schema';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategies/jwt.strategy';
+// import { ClientsModule, Transport } from '@nestjs/microservices';
+import { RabbitMQModule } from 'src/rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
+    RabbitMQModule,
     UsersModule,
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     JwtModule.registerAsync({
