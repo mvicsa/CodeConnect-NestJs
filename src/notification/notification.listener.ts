@@ -10,6 +10,7 @@ import {
 import { Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import { Notification } from './entities/notification.schema';
+import { NotificationGateway } from './notification.gateway';
 
 @Controller()
 export class NotificationListener {
@@ -20,6 +21,7 @@ export class NotificationListener {
     private readonly moduleRef: ModuleRef,
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
+    private readonly gateway: NotificationGateway, 
   ) {
     this.logger.log('✅ NotificationListener initialized');
   }
@@ -56,6 +58,11 @@ export class NotificationListener {
       // await this.notificationService.create(notificationDto);
       this.logger.log(`💾 Notification saved: ${createdNotification._id}`);
 
+
+      // this.gateway.sendNotificationToUser(
+      //   createdNotification.userId,
+      //   createdNotification,
+      // );
       // Acknowledge the message
       const channel = context.getChannelRef();
       const originalMsg = context.getMessage();
