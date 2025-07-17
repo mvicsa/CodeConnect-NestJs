@@ -2,15 +2,19 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, Schema as MongooseSchema } from 'mongoose';
 import { Post, PostDocument } from './shemas/post.schema';
+import { AiAgentService } from '../ai-agent/ai-agent.service';
+import { CodeSuggestion, CodeSuggestionDocument } from './shemas/code-suggestion.schema';
 
 @Injectable()
 export class PostsService {
   constructor(
     @InjectModel(Post.name) private postModel: Model<PostDocument>,
+    @InjectModel(CodeSuggestion.name) private codeSuggestionModel: Model<CodeSuggestionDocument>,
+    private aiAgentService: AiAgentService,
   ) {}
 
   async findAll(page = 1, limit = 10): Promise<Post[]> {
-    return this.postModel
+    const posts = await this.postModel
       .find()
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
@@ -21,6 +25,8 @@ export class PostsService {
         select: '_id firstName lastName avatar role',
       })
       .exec();
+    
+    return posts;
   }
 
   async findOne(_id: string): Promise<Post> {
@@ -30,6 +36,7 @@ export class PostsService {
         path: 'userReactions.userId',
         select: '_id firstName lastName avatar role',
       });
+    
     if (!post) throw new NotFoundException('Post not found');
     return post;
   }
@@ -45,7 +52,37 @@ export class PostsService {
       select: '_id firstName lastName avatar role',
     });
     
+    // If post contains code, generate AI suggestions synchronously
+    if (created.code && created.codeLang) {
+      try {
+        const suggestions = await this.aiAgentService.getCodeHelpSuggestions({
+          code: created.code,
+          description: 'Analyze this code and provide suggestions for improvements or potential issues',
+          language: created.codeLang,
+        });
+
+        // Save suggestions to database
+        const codeSuggestion = new this.codeSuggestionModel({
+          postId: created._id,
+          suggestions,
+        });
+        await codeSuggestion.save();
+        
+        // Update the post to indicate it has AI suggestions
+        await this.postModel.findByIdAndUpdate(created._id, { hasAiSuggestions: true });
+      } catch (error) {
+        console.error('Error generating code suggestions:', error);
+        // Even if AI suggestion fails, we still return the post
+      }
+    }
+    
     return created;
+  }
+
+  // Get code suggestions for a post
+  async getCodeSuggestions(postId: string): Promise<CodeSuggestion | null> {
+    const suggestion = await this.codeSuggestionModel.findOne({ postId: new Types.ObjectId(postId) });
+    return suggestion;
   }
 
   async update(_id: string, data: Partial<Post>, userId: string): Promise<Post> {
