@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, Schema as MongooseSchema } from 'mongoose';
-import { Post, PostDocument } from '../users/shemas/post.schema';
+import { Post, PostDocument } from './shemas/post.schema';
 
 @Injectable()
 export class PostsService {
@@ -36,7 +36,16 @@ export class PostsService {
 
   async create(data: Omit<Post, 'createdBy'>, userId: string): Promise<Post> {
     const created = new this.postModel({ ...data, createdBy: userId });
-    return created.save();
+    await created.save();
+    
+    // Populate createdBy and userReactions.userId before returning
+    await created.populate('createdBy', '-password');
+    await created.populate({
+      path: 'userReactions.userId',
+      select: '_id firstName lastName avatar role',
+    });
+    
+    return created;
   }
 
   async update(_id: string, data: Partial<Post>, userId: string): Promise<Post> {
@@ -103,16 +112,22 @@ export class PostsService {
     const post = await this.postModel.findById(postId);
     if (!post) throw new NotFoundException('Post not found');
 
-    // Remove any existing reaction by this user
-    post.userReactions = post.userReactions.filter(ur => ur.userId.toString() !== userId);
-
-    // Add the new reaction
-    post.userReactions.push({
-      userId: new Types.ObjectId(userId),
-      username,
-      reaction,
-      createdAt: new Date(),
-    });
+    // Check if user already has the same reaction
+    const existingReaction = post.userReactions.find(ur => ur.userId.toString() === userId);
+    
+    if (existingReaction && existingReaction.reaction === reaction) {
+      // Remove the reaction if it's the same
+      post.userReactions = post.userReactions.filter(ur => ur.userId.toString() !== userId);
+    } else {
+      // Remove any existing reaction by this user and add the new one
+      post.userReactions = post.userReactions.filter(ur => ur.userId.toString() !== userId);
+      post.userReactions.push({
+        userId: new Types.ObjectId(userId),
+        username,
+        reaction,
+        createdAt: new Date(),
+      });
+    }
 
     // Update the reactions count
     const reactionTypes = ['like', 'love', 'wow', 'funny', 'dislike', 'happy'];
@@ -122,6 +137,14 @@ export class PostsService {
     }, {} as any);
 
     await post.save();
+    
+    // Populate userReactions.userId and createdBy before returning
+    await post.populate('createdBy', '-password');
+    await post.populate({
+      path: 'userReactions.userId',
+      select: '_id firstName lastName avatar role',
+    });
+    
     return post;
   }
 } 
