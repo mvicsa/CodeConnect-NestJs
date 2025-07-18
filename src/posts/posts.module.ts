@@ -6,17 +6,13 @@ import { PostsController } from './posts.controller';
 import { Comment, CommentSchema } from './shemas/comment.schema';
 import { CommentsService } from './comments.service';
 import { CommentsController } from './comments.controller';
-import { AiAgentModule } from '../ai-agent/ai-agent.module';
-import { CodeSuggestion, CodeSuggestionSchema } from './shemas/code-suggestion.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Post.name, schema: PostSchema },
       { name: Comment.name, schema: CommentSchema },
-      { name: CodeSuggestion.name, schema: CodeSuggestionSchema },
     ]),
-    AiAgentModule,
   ],
   providers: [PostsService, CommentsService],
   controllers: [PostsController, CommentsController],

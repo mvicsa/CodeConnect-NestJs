@@ -15,9 +15,6 @@ export class Post {
   @Prop()
   codeLang?: string;
 
-  @Prop({ default: false })
-  hasAiSuggestions?: boolean;
-
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
   createdBy: MongooseSchema.Types.ObjectId;
 
