@@ -5,6 +5,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { NotificationModule } from './notification/notification.module';
+import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { PostsModule } from './posts/posts.module';
 
 @Module({
@@ -19,6 +21,8 @@ import { PostsModule } from './posts/posts.module';
     }),
     AuthModule,
     UsersModule,
+    NotificationModule,
+    RabbitMQModule,
     PostsModule,
   ],
   controllers: [AppController],
