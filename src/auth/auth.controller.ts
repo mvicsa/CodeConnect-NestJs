@@ -1,3 +1,14 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Logger,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { Request } from 'express';
 import { Body, Controller, Get, Post, Req, UseGuards, Res } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -13,12 +24,19 @@ import {
   ApiUnauthorizedResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { ClientProxy } from '@nestjs/microservices';
+import { from } from 'rxjs';
 
 @ApiTags('Auth')
 @ApiBearerAuth()
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  private readonly logger = new Logger(AuthController.name);
+  constructor(
+    private readonly authService: AuthService,
+    @Inject('RABBITMQ_PRODUCER')
+    private readonly client: ClientProxy,
+  ) {}
 
   @Post('register')
   @ApiCreatedResponse({ description: 'User successfully registered' })
@@ -33,7 +51,22 @@ export class AuthController {
   @ApiOkResponse({ description: 'User logged in successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
   async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+    this.logger.log(`LoginDto ${JSON.stringify(loginDto)}`);
+    try {
+      await this.client.connect();
+      const response = await this.authService.login(loginDto);
+      this.client.emit('user.login', {
+        userId: response.user._id,
+        content: response.message,
+        type: 'user',
+        data: response.user,
+        fromUserId: response.user._id,
+      });
+      this.logger.log(`✅ Emitted user.login event for: ${loginDto.email}`);
+      return response;
+    } catch (error) {
+      this.logger.error(`❌ Failed to emit user.login event: ${error}`);
+    }
   }
 
   @Get('profile')
