@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type UserDocument = User & Document;
 
@@ -56,6 +56,12 @@ export class User {
 
   @Prop({ type: String, enum: UserRole, default: UserRole.USER })
   role: UserRole;
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'ChatRoom' }], default: [] })
+  chatRooms: Types.ObjectId[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Group' }], default: [] })
+  groups: Types.ObjectId[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
