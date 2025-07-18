@@ -6,10 +6,9 @@ import {
   Logger,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
-import { Request } from 'express';
-import { Body, Controller, Get, Post, Req, UseGuards, Res } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -25,7 +24,6 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
-import { from } from 'rxjs';
 
 @ApiTags('Auth')
 @ApiBearerAuth()
