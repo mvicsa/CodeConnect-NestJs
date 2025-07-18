@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, Query, HttpCode, HttpStatus, UseGuards, Req } from '@nestjs/common';
 import { PostsService } from './posts.service';
-import { Post as PostModel } from '../users/shemas/post.schema';
+import { Post as PostModel } from './shemas/post.schema';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
@@ -118,5 +118,18 @@ export class PostsController {
   async delete(@Param('id') id: string, @Req() req: Request & { user: any }) {
     await this.postsService.delete(id, req.user.sub);
     return;
+  }
+
+  @Get(':id/code-suggestions')
+  @ApiOperation({ summary: 'Get AI code suggestions for a post' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200, description: 'Code suggestions for the post' })
+  @ApiResponse({ status: 404, description: 'Post not found or no suggestions available' })
+  async getCodeSuggestions(@Param('id') id: string) {
+    const suggestion = await this.postsService.getCodeSuggestions(id);
+    if (!suggestion) {
+      return { message: 'No suggestions available for this post.' };
+    }
+    return suggestion;
   }
 } 

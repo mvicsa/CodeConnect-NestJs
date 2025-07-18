@@ -31,12 +31,14 @@ export class User {
   @Prop({ required: true })
   password: string;
 
-  @Prop({ default: 'https://randomuser.me/api/portraits/lego/1.jpg' })
+  @Prop()
+  // { default: 'https://randomuser.me/api/portraits/lego/1.jpg' }
   avatar: string;
 
-  @Prop({
-    default: 'https://images.unsplash.com/photo-1503264116251-35a269479413',
-  })
+  @Prop()
+  //   {
+  //   default: 'https://images.unsplash.com/photo-1503264116251-35a269479413',
+  // }
   cover: string;
 
   @Prop({ type: [String], default: [] })
