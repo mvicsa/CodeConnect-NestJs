@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { NotificationModule } from './notification/notification.module';
 import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { PostsModule } from './posts/posts.module';
+import { AiAgentModule } from './ai-agent/ai-agent.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PostsModule } from './posts/posts.module';
     NotificationModule,
     RabbitMQModule,
     PostsModule,
+    AiAgentModule,
   ],
   controllers: [AppController],
   providers: [AppService],
