@@ -14,45 +14,82 @@ import { ChatService } from './chat.service';
 import { JwtService } from '@nestjs/jwt';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { ChatRoomDocument } from './schemas/chat-room.schema';
+import { ConfigService } from '@nestjs/config';
+import * as jwt from 'jsonwebtoken';
 
 @WebSocketGateway({ namespace: '/chat', cors: true })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly chatService: ChatService, private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly chatService: ChatService, 
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService
+  ) {}
 
-  @UseGuards(JwtAuthGuard)
   async handleConnection(client: Socket) {
     try {
+      console.log('Socket.IO: handleConnection called');
       // Extract JWT token from handshake
       const token = client.handshake.auth?.token || client.handshake.headers['authorization']?.split(' ')[1];
+      console.log('Socket.IO: Received token:', token);
+
       if (!token) {
+        console.log('Socket.IO: No token provided, disconnecting');
         client.disconnect();
         return;
       }
-      // Verify token and get user
-      const payload = this.jwtService.verify(token);
+
+      // Option 1: Use manual verification with jwt library
+      let payload;
+      try {
+        const secret = this.configService.get<string>('JWT_SECRET');
+        if (!secret) {
+          console.log('Socket.IO: JWT_SECRET not found in config');
+          client.disconnect();
+          return;
+        }
+        payload = jwt.verify(token, secret) as any;
+      } catch (error) {
+        console.log('Socket.IO: Token verification failed:', error.message);
+        client.disconnect();
+        return;
+      }
+
+      // Option 2: Alternative using NestJS JwtService with explicit secret
+      // const secret = this.configService.get<string>('JWT_SECRET');
+      // const payload = await this.jwtService.verifyAsync(token, { secret });
+
+      console.log('Socket.IO: Token payload:', payload);
+
       const userId = payload.sub || payload.id || payload._id;
       if (!userId) {
+        console.log('Socket.IO: No userId in token, disconnecting');
         client.disconnect();
         return;
       }
+
       // Fetch all chat rooms for user
-      const rooms = await this.chatService.getUserChatRooms(userId) as ChatRoomDocument[];
-      const roomIds = rooms.map(room => (room as any)._id.toString());
-      // Join each room
-      roomIds.forEach(roomId => client.join(roomId));
-      // Optionally, store userId on socket for later use
+      const rooms = await this.chatService.getUserChatRooms(userId);
+      
+      // Join user to all their chat rooms
+      rooms.forEach(room => {
+        client.join((room as any)._id.toString());
+      });
+
+      // Emit connected event with full room data
+      client.emit('connected', { rooms });
       (client as any).userId = userId;
-      // Emit connected event
-      client.emit('connected', { rooms: roomIds });
+      console.log('Socket.IO: Connection successful for user', userId);
     } catch (err) {
+      console.error('Socket.IO: handleConnection error:', err);
       client.disconnect();
     }
   }
 
   handleDisconnect(client: Socket) {
+    console.log('Socket.IO: handleDisconnect called for client', client.id);
     // Handle disconnect
   }
 
@@ -75,14 +112,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleSeen(@MessageBody() data: { roomId: string; messageIds: string[] }, @ConnectedSocket() client: Socket) {
     const userId = (client as any).userId;
     if (!userId) {
+      console.log('[GATEWAY] Unauthorized seen attempt');
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
-    await this.chatService.markMessagesAsSeen(userId, data.messageIds);
-    // Broadcast to room that these messages were seen by this user
-    client.to(data.roomId).emit('chat:seen', { messageIds: data.messageIds, userId });
-    // Optionally, emit to sender for instant UI update
-    client.emit('chat:seen', { messageIds: data.messageIds, userId });
+
+    console.log('[GATEWAY] Processing seen message request:', { ...data, userId });
+    try {
+      await this.chatService.markMessagesAsSeen(userId, data.messageIds);
+      console.log('[GATEWAY] Messages marked as seen, broadcasting to room:', data.roomId);
+      
+      // Broadcast to all clients in the room, including sender
+      this.server.to(data.roomId).emit('chat:seen', {
+        messageIds: data.messageIds,
+        roomId: data.roomId,
+        userId
+      });
+      
+      console.log('[GATEWAY] Seen event broadcasted successfully');
+    } catch (error) {
+      console.error('[GATEWAY] Error marking messages as seen:', error);
+      client.emit('chat:error', { message: 'Failed to mark messages as seen' });
+    }
   }
 
   @SubscribeMessage('chat:typing')
@@ -100,12 +151,29 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleDeleteMessage(@MessageBody() data: { roomId: string; messageId: string; forAll: boolean }, @ConnectedSocket() client: Socket) {
     const userId = (client as any).userId;
     if (!userId) {
+      console.log('[GATEWAY] Unauthorized delete attempt');
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
-    await this.chatService.deleteMessage(userId, data.messageId, data.forAll);
-    // Broadcast to room
-    this.server.to(data.roomId).emit('chat:delete_message', { messageId: data.messageId, forAll: data.forAll, userId });
+    
+    console.log('[GATEWAY] Processing delete message request:', { ...data, userId });
+    try {
+      await this.chatService.deleteMessage(userId, data.messageId, data.forAll);
+      console.log('[GATEWAY] Message deleted successfully, broadcasting to room:', data.roomId);
+      
+      // Broadcast to all clients in the room, including sender
+      this.server.to(data.roomId).emit('chat:delete_message', {
+        messageId: data.messageId,
+        roomId: data.roomId,
+        forAll: data.forAll,
+        userId
+      });
+      
+      console.log('[GATEWAY] Delete event broadcasted successfully');
+    } catch (error) {
+      console.error('[GATEWAY] Error deleting message:', error);
+      client.emit('chat:error', { message: 'Failed to delete message' });
+    }
   }
 
   @SubscribeMessage('chat:react_message')
@@ -181,5 +249,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(data.roomId).emit('chat:unpin_message', { roomId: data.roomId, messageId: data.messageId, userId });
   }
 
+  @SubscribeMessage('chat:get_messages')
+  async handleGetMessages(
+    @MessageBody() data: { roomId: string; limit?: number; before?: string },
+    @ConnectedSocket() client: Socket
+  ) {
+    const userId = (client as any).userId;
+    if (!userId) {
+      console.log('[GATEWAY] Unauthorized message fetch attempt');
+      client.emit('chat:error', { message: 'Unauthorized' });
+      return;
+    }
+
+    console.log('[GATEWAY] Fetching messages:', data);
+    try {
+      const messages = await this.chatService.getPaginatedMessages(
+        data.roomId,
+        data.limit || 50,
+        data.before
+      );
+      console.log('[GATEWAY] Fetched messages count:', messages.length);
+
+      // Send messages only to the requesting client
+      client.emit('chat:messages', {
+        roomId: data.roomId,
+        messages,
+        hasMore: messages.length === (data.limit || 50)
+      });
+    } catch (error) {
+      console.error('[GATEWAY] Error fetching messages:', error);
+      client.emit('chat:error', { message: 'Failed to fetch messages' });
+    }
+  }
+
   // Event handlers will be added here
-} 
+}
