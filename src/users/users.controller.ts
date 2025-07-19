@@ -1,8 +1,9 @@
-import { Body, Controller, Param, Post, Delete, Get, Req, UseGuards, Query } from '@nestjs/common';
+import { Body, Controller, Param, Post, Delete, Get, Req, UseGuards, Query, Patch } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth, ApiOkResponse, ApiNotFoundResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -86,6 +87,17 @@ export class UsersController {
   ) {
     const userId = req.user?.sub;
     return this.usersService.suggestUsers(userId, limit ? Number(limit) : 5, skip ? Number(skip) : 0);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update current user profile' })
+  @ApiResponse({ status: 200, description: 'User updated successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async updateMe(@Req() req: Request & { user: any }, @Body() updateUserDto: UpdateUserDto) {
+    const userId = req.user?.sub;
+    return this.usersService.updateUser(userId, updateUserDto);
   }
 
   @Get(':username')
