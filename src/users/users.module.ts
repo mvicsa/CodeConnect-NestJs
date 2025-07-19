@@ -5,6 +5,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from './shemas/user.schema';
 import { ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
         },
       },
     ]),
+    NotificationModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

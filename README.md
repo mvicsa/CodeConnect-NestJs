@@ -2,135 +2,104 @@
 
 ## Overview
 
-CodeConnect-NestJs is a backend API built with NestJS, MongoDB, and OpenAI integration. It supports user authentication, posting code/content, and provides AI-powered code suggestions for posts containing code.
+CodeConnect-NestJs is a collaborative backend platform built with [NestJS](https://nestjs.com/) that empowers developers to connect, share code, and receive AI-powered code suggestions. It features real-time notifications, video/audio rooms via LiveKit, and robust authentication (including GitHub OAuth). The project is designed for developer communities to interact, post code snippets, comment, and get AI-driven help for code issues.
+
+## Main Features
+
+- **User Authentication**: Register, login, and manage user profiles. Supports JWT and GitHub OAuth.
+- **Posts & Comments**: Share code snippets, text, images, and videos. Comment and react to posts.
+- **AI Code Help**: Get AI-powered suggestions for code problems using OpenAI (guidance only, no full solutions).
+- **LiveKit Integration**: Create and join real-time video/audio rooms for collaborative sessions.
+- **Real-Time Notifications**: Receive instant notifications for new posts, comments, likes, and more via WebSockets.
+- **Microservices & RabbitMQ**: Scalable architecture using RabbitMQ for event-driven notifications.
+- **Swagger API Docs**: Interactive API documentation available at `/api`.
 
 ---
 
-## Features
-- User registration and authentication (JWT)
-- Create, update, delete, and fetch posts
-- AI agent that analyzes code in posts and provides suggestions (no full solutions)
-- Retrieve AI suggestions for any post with code
-- Comments and reactions on posts
+## Quick Start
 
----
-
-**Notes:**
-- If you are not using RabbitMQ, you can remove the RabbitMQ section.
-- Fill in the GitHub OAuth and OpenAI variables with your actual credentials.
-- Adjust `PORT` and `FRONTEND_URL` as needed for your environment.
-
----
-
-## Setup & Installation
-
-1. **Clone the repository:**
-   ```bash
-   git clone <repo-url>
-   cd CodeConnect-NestJs
-   ```
-
-2. **Install dependencies:**
+1. **Install dependencies**:
    ```bash
    npm install
    ```
-
-3. **Create a `.env` file** in the root directory with the following variables:
-    ```env
-    # Server
-    PORT=5000
-
-    # MongoDB
-    MONGO_URI=
-
-    # JWT Authentication
-    JWT_SECRET=your_jwt_secret_key
-    JWT_EXPIRES=1d
-
-    # Default Images
-    DEFAULT_COVER_IMAGE=https://images.unsplash.com/photo-1503264116251-35a269479413
-    DEFAULT_AVATAR_IMAGE=https://randomuser.me/api/portraits/lego/1.jpg
-
-    # GitHub OAuth
-    GITHUB_CLIENT_ID=
-    GITHUB_CLIENT_SECRET=
-    GITHUB_CALLBACK_URL=
-
-    # CORS / Frontend
-    FRONTEND_URL=http://localhost:3000
-
-    # OpenAI Configuration
-    OPENAI_API_KEY=your_openai_api_key
-    OPENAI_MODEL=gpt-4o-mini
-    OPENAI_TEMPERATURE=0.9
-    OPENAI_MAX_TOKENS=500
-
-    # RabbitMQ (if used)
-    AMQP_URL=amqp://localhost:5672
-    RMQ_QUEUE=notifications_queue
-    RMQ_PREFETCH_COUNT=1
-    RMQ_RETRY_ATTEMPTS=5
-    RMQ_RETRY_DELAY=1000
-    RMQ_HEARTBEAT=60
-    RMQ_CONNECTION_TIMEOUT=10000
-    RMQ_NO_ACK=false
-    ```
-
-4. **Run the development server:**
+2. **Create a `.env` file** in the root directory:
+   ```env
+   MONGO_URI=<your-mongodb-atlas-uri>
+   JWT_SECRET=supersecretkey
+   JWT_EXPIRES=1d
+   OPENAI_API_KEY=<your-openai-api-key>
+   # (Optional) LiveKit and RabbitMQ configs
+   LIVEKIT_API_KEY=...
+   LIVEKIT_API_SECRET=...
+   AMQP_URL=amqp://localhost:5672
+   ```
+3. **Run the development server**:
    ```bash
    npm run start:dev
    ```
 
 ---
 
-## API Endpoints
+## API Documentation
 
-### Authentication
-- `POST /auth/register` — Register a new user
-- `POST /auth/login` — Login and receive JWT
-- `GET /auth/profile` — Get current user profile (JWT required)
-
-### Posts
-- `GET /posts` — Get all posts (supports pagination)
-- `GET /posts/:id` — Get a single post by ID
-- `POST /posts` — Create a new post (JWT required)
-- `PUT /posts/:id` — Update a post (JWT required)
-- `DELETE /posts/:id` — Delete a post (JWT required)
-
-### AI Code Suggestions
-- `GET /posts/:id/code-suggestions` — Get AI suggestions for a post with code
-
-  **Response Example:**
-  ```json
-  {
-    "_id": "64a7b2e1c3f4d5e6f7890abc",
-    "postId": "64a7b2e1c3f4d5e6f7890123",
-    "suggestions": "• Consider using const instead of let for variables that don't change\n• The function could benefit from error handling for edge cases\n• ...",
-    "createdAt": "2025-07-17T22:30:45.123Z",
-    "updatedAt": "2025-07-17T22:30:45.123Z"
-  }
-  ```
-
-  **If no suggestions are available:**
-  ```json
-  { "message": "No suggestions available for this post." }
-  ```
-
-- Each post with code will have a `hasAiSuggestions` flag in its response.
+After starting the server, open your browser and navigate to:
+```
+http://localhost:3000/api
+```
+You’ll find a full Swagger UI where you can test all available routes.
 
 ---
 
-## How AI Suggestions Work
-- When a post is created with code, the backend waits for the AI agent to analyze the code and generate suggestions before responding.
-- The suggestions are stored and can be retrieved at any time using the `/posts/:id/code-suggestions` endpoint.
-- The AI agent only provides hints and suggestions, never full code solutions.
+## Key Endpoints
+
+### `POST /auth/register`
+Registers a new user.
+
+### `POST /auth/login`
+Logs in the user and returns a JWT token.
+
+### `GET /auth/profile` (Protected)
+Fetches the authenticated user's profile. Requires Bearer Token.
+
+### `POST /ai-agent/code-help` (Protected)
+Get AI-powered suggestions for fixing code problems. Requires Bearer Token.
+
+**Request Body Example:**
+```json
+{
+  "code": "function add(a, b) { return a - b; }",
+  "description": "The add function is not working correctly",
+  "language": "javascript"
+}
+```
+**Response Example:**
+```json
+{
+  "suggestions": "- Check the operator in your return statement..."
+}
+```
+
+### `POST /livekit/rooms` (Protected)
+Create a new LiveKit room for real-time collaboration.
+
+### `GET /livekit/token?secretId=...` (Protected)
+Get a LiveKit access token for joining a room.
 
 ---
 
-## Swagger API Docs
-- After running the server, visit: `http://localhost:5000/api` to view and test all endpoints interactively.
+## Real-Time Notifications
+
+- Notifications are delivered via WebSockets.
+- Users join their notification room on connection and receive updates for new posts, comments, likes, and more.
+
+---
+
+## Contributing
+
+Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
 
 ---
 
 ## License
-This project is for educational/demo purposes.
+
+This project is UNLICENSED. See the [LICENSE](LICENSE) file for details.
