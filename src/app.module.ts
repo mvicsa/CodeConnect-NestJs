@@ -5,11 +5,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
-import { NotificationModule } from './notification/notification.module';
-import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { PostsModule } from './posts/posts.module';
 import { AiAgentModule } from './ai-agent/ai-agent.module';
 import { LivekitModule } from './livekit/livekit.module';
+import { NotificationModule } from './notification/notification.module';
+import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
@@ -23,11 +23,11 @@ import { LivekitModule } from './livekit/livekit.module';
     }),
     AuthModule,
     UsersModule,
-    NotificationModule,
-    RabbitMQModule,
     PostsModule,
     AiAgentModule,
     LivekitModule,
+    NotificationModule,
+    RabbitMQModule
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './shemas/user.schema';
@@ -11,6 +11,20 @@ export class UsersService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly notificationService: NotificationService,
   ) {}
+
+  async findByUsername(username: string) {
+    // Exclude password and email
+    const user = await this.userModel.findOne({ username }).select('-password -email');
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
+  }
+
+  async findAll() {
+    // Exclude password
+    return this.userModel.find().select('-password');
+  }
 
   async followUser(userId: string, targetUserId: string) {
     if (userId === targetUserId) throw new Error('Cannot follow yourself');

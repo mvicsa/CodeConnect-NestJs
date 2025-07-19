@@ -1,6 +1,6 @@
 import { Body, Controller, Param, Post, Delete, Get, Req, UseGuards, Query } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth, ApiOkResponse, ApiNotFoundResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
 
@@ -75,7 +75,7 @@ export class UsersController {
   @Get('suggestions')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get user suggestions (users you do not follow yet)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20, description: 'Number of users to return' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 5, description: 'Number of users to return' })
   @ApiQuery({ name: 'skip', required: false, type: Number, example: 0, description: 'Number of users to skip' })
   @ApiResponse({ status: 200, description: 'List of suggested users' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -85,6 +85,19 @@ export class UsersController {
     @Query('skip') skip?: string,
   ) {
     const userId = req.user?.sub;
-    return this.usersService.suggestUsers(userId, limit ? Number(limit) : 20, skip ? Number(skip) : 0);
+    return this.usersService.suggestUsers(userId, limit ? Number(limit) : 5, skip ? Number(skip) : 0);
+  }
+
+  @Get(':username')
+  @ApiOkResponse({ description: 'Public user profile returned.' })
+  @ApiNotFoundResponse({ description: 'User not found.' })
+  async getUserProfile(@Param('username') username: string) {
+    return this.usersService.findByUsername(username);
+  }
+
+  @Get()
+  @ApiOkResponse({ description: 'List of all users returned.' })
+  async getAllUsers() {
+    return this.usersService.findAll();
   }
 }
