@@ -119,4 +119,17 @@ export class PostsController {
     await this.postsService.delete(id, req.user.sub);
     return;
   }
+
+  @Get(':id/code-suggestions')
+  @ApiOperation({ summary: 'Get AI code suggestions for a post' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200, description: 'Code suggestions for the post' })
+  @ApiResponse({ status: 404, description: 'Post not found or no suggestions available' })
+  async getCodeSuggestions(@Param('id') id: string) {
+    const suggestion = await this.postsService.getCodeSuggestions(id);
+    if (!suggestion) {
+      return { message: 'No suggestions available for this post.' };
+    }
+    return suggestion;
+  }
 } 
