@@ -7,8 +7,8 @@ import { User, UserSchema } from 'src/users/shemas/user.schema';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategies/jwt.strategy';
-// import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RabbitMQModule } from 'src/rabbitmq/rabbitmq.module';
+import { GitHubStrategy } from './strategies/github.strategy';
 
 @Module({
   imports: [
@@ -27,6 +27,6 @@ import { RabbitMQModule } from 'src/rabbitmq/rabbitmq.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, GitHubStrategy],
 })
 export class AuthModule {}

@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
 import { User, UserDocument } from '../users/shemas/user.schema';
 import { RegisterDto } from './dto/register.dto';
@@ -39,12 +40,21 @@ export class AuthService {
 
     const savedUser = await createdUser.save();
 
+    // Generate JWT
+    const payload = {
+      sub: savedUser._id,
+      email: savedUser.email,
+      role: savedUser.role,
+    };
+    const token = await this.jwtService.signAsync(payload);
+
     // Remove password before returning
     const { password: _, ...userWithoutPassword } = savedUser.toObject();
 
     return {
       message: 'User registered successfully',
       user: userWithoutPassword,
+      token,
     };
   }
 
@@ -87,5 +97,47 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  async handleGithubLogin(githubUser: any) {
+    // Try to find user by email or githubId (using username as fallback)
+    let user = await this.userModel.findOne({
+      $or: [
+        { email: githubUser.email },
+        { username: githubUser.githubUsername },
+      ],
+    });
+
+    if (!user) {
+      // Generate a random password for social users
+      const randomPassword = crypto.randomBytes(32).toString('hex');
+      user = new this.userModel({
+        firstName: githubUser.firstName || githubUser.username || 'GitHub',
+        lastName: githubUser.lastName || '',
+        username: githubUser.githubUsername,
+        email: githubUser.email,
+        password: randomPassword, // Set a random password
+        avatar: githubUser.avatar,
+        role: 'user',
+        // Optionally: add isGithubUser: true, githubId, etc.
+      });
+      await user.save();
+    }
+
+    // Generate JWT
+    const payload = {
+      sub: user._id,
+      email: user.email,
+      role: user.role,
+    };
+    const token = await this.jwtService.signAsync(payload);
+
+    // Remove password before returning
+    const { password: _, ...userWithoutPassword } = user.toObject();
+
+    return {
+      user: userWithoutPassword,
+      token,
+    };
   }
 }
