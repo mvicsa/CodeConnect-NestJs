@@ -79,6 +79,18 @@ export class User {
 
   @Prop({ type: [{ type: String, ref: 'User' }], default: [] })
   following: string[];
+
+  @ApiProperty({ required: false, nullable: true })
+  @Prop({ type: String, default: null })
+  bio?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  @Prop({ type: String, default: null })
+  city?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  @Prop({ type: String, default: null })
+  country?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -92,4 +92,10 @@ export class UsersService {
       .limit(Number(limit))
       .skip(Number(skip));
   }
+
+  async updateUser(userId: string, updateUserDto: any) {
+    const user = await this.userModel.findByIdAndUpdate(userId, updateUserDto, { new: true }).select('-password');
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
 }
