@@ -11,7 +11,7 @@ export class NotificationService {
   constructor(
     @InjectModel('Notification')
     private readonly notificationModel: Model<NotificationDocument>,
-    @Inject(forwardRef(() => NotificationGateway)) // ✅ use forwardRef here
+    @Inject(forwardRef(() => NotificationGateway))
     private readonly gateway: NotificationGateway,
   ) {}
 
@@ -24,7 +24,7 @@ export class NotificationService {
   findByUser(userId: string) {
     return this.notificationModel.find({ userId }).sort({ createdAt: -1 });
   }
-  // notification.service.ts
+
   async markAsRead(notificationId: string) {
     return this.notificationModel.findByIdAndUpdate(
       notificationId,

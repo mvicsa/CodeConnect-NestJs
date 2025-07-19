@@ -1,30 +1,4 @@
 // // notification.gateway.ts
-// import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
-// import { Server } from 'socket.io';
-// import { Notification } from './entities/notification.schema';
-
-// @WebSocketGateway()
-// export class NotificationGateway {
-//   @WebSocketServer()
-//   server: Server;
-
-//   afterInit() {
-//     console.log('WebSocket Gateway initialized');
-//   }
-
-//   // notification.gateway.ts
-//   @SubscribeMessage('join')
-//   handleJoin(@MessageBody() userId: string, @ConnectedSocket() client: Socket) {
-//     client.join(`user:${userId}`);
-//     console.log(`User ${userId} joined room user:${userId}`);
-//   }
-
-//   sendNotificationToUser(userId: string, notification: Notification) {
-//     this.server.to(`user:${userId}`).emit('notification', notification);
-//   }
-// }
-
-// notification.gateway.tsimport
 import {
   WebSocketGateway,
   WebSocketServer,

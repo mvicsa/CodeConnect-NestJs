@@ -50,15 +50,6 @@ export class AuthController {
   async login(@Body() loginDto: LoginDto) {
     this.logger.log(`LoginDto ${JSON.stringify(loginDto)}`);
 
-    //    userId: string;
-    // content: string;
-    // type: string;
-    // data: Record<string, unknown>;
-    // fromUserId?: string;
-
-    //  message: 'Login successful',
-    //   user: userWithoutPassword,
-    //   token,
     try {
       await this.client.connect();
       const response = await this.authService.login(loginDto);
