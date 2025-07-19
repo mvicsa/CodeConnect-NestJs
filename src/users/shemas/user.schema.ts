@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Types } from 'mongoose';
 import { Document } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -73,6 +74,12 @@ export class User {
   @ApiProperty({ enum: UserRole })
   @Prop({ type: String, enum: UserRole, default: UserRole.USER })
   role: UserRole;
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'ChatRoom' }], default: [] })
+  chatRooms: Types.ObjectId[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Group' }], default: [] })
+  groups: Types.ObjectId[];
 
   @Prop({ type: [{ type: String, ref: 'User' }], default: [] })
   followers: string[];
