@@ -58,6 +58,12 @@ export class User {
 
   @Prop({ type: String, enum: UserRole, default: UserRole.USER })
   role: UserRole;
+
+  @Prop({ type: [{ type: String, ref: 'User' }], default: [] })
+  followers: string[];
+
+  @Prop({ type: [{ type: String, ref: 'User' }], default: [] })
+  following: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

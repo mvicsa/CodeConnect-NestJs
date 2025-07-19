@@ -19,8 +19,8 @@ export class AiAgentService {
 
     this.aiConfig = {
       apiKey,
-      model: this.configService.get<string>('OPENAI_MODEL', 'gpt-4o'),
-      temperature: Number(this.configService.get<string>('OPENAI_TEMPERATURE') || 0.7),
+      model: this.configService.get<string>('OPENAI_MODEL', 'gpt-4o-mini'),
+      temperature: Number(this.configService.get<string>('OPENAI_TEMPERATURE') || 0.9),
       maxTokens: Number(this.configService.get<string>('OPENAI_MAX_TOKENS') || 500),
     };
 

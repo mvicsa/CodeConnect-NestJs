@@ -9,6 +9,7 @@ import { NotificationModule } from './notification/notification.module';
 import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { PostsModule } from './posts/posts.module';
 import { AiAgentModule } from './ai-agent/ai-agent.module';
+import { LivekitModule } from './livekit/livekit.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AiAgentModule } from './ai-agent/ai-agent.module';
     RabbitMQModule,
     PostsModule,
     AiAgentModule,
+    LivekitModule,
   ],
   controllers: [AppController],
   providers: [AppService],
