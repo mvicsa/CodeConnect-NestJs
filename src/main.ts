@@ -1,15 +1,10 @@
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { ConfigService } from '@nestjs/config';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
-  const logger = new Logger('bootstrap');
-  const app = await NestFactory.create(AppModule, {
-    logger: ['error', 'warn', 'log', 'debug', 'verbose'],
-  });
+  const app = await NestFactory.create(AppModule);
 
   // Enable CORS
   app.enableCors();
@@ -85,6 +80,5 @@ async function bootstrap() {
 
   // Start server
   await app.listen(process.env.PORT || 5000);
-  console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();

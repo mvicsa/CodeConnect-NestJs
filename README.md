@@ -1,109 +1,105 @@
 # CodeConnect-NestJs
 
-## Installation & Setup
+## Overview
 
-1. **required packages**:
+CodeConnect-NestJs is a collaborative backend platform built with [NestJS](https://nestjs.com/) that empowers developers to connect, share code, and receive AI-powered code suggestions. It features real-time notifications, video/audio rooms via LiveKit, and robust authentication (including GitHub OAuth). The project is designed for developer communities to interact, post code snippets, comment, and get AI-driven help for code issues.
 
-```bash
-npm install @nestjs/mongoose mongoose
-npm install @nestjs/passport passport @nestjs/jwt passport-jwt bcrypt
-npm install class-validator class-transformer
-npm install @nestjs/swagger swagger-ui-express
-npm install @nestjs/config
-npm install
-```
+## Main Features
 
-3. **Create a `.env` file** in the root directory:
-
-```env
-MONGO_URI=<your-mongodb-atlas-uri>
-JWT_SECRET=supersecretkey
-JWT_SECRET=jwt_secret_key
-JWT_EXPIRES=1d
-```
-
-4. **Run the development server**:
-
-```bash
-npm run start:dev
-```
+- **User Authentication**: Register, login, and manage user profiles. Supports JWT and GitHub OAuth.
+- **Posts & Comments**: Share code snippets, text, images, and videos. Comment and react to posts.
+- **AI Code Help**: Get AI-powered suggestions for code problems using OpenAI (guidance only, no full solutions).
+- **LiveKit Integration**: Create and join real-time video/audio rooms for collaborative sessions.
+- **Real-Time Notifications**: Receive instant notifications for new posts, comments, likes, and more via WebSockets.
+- **Microservices & RabbitMQ**: Scalable architecture using RabbitMQ for event-driven notifications.
+- **Swagger API Docs**: Interactive API documentation available at `/api`.
 
 ---
 
-## Testing the API with Swagger
+## Quick Start
+
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+2. **Create a `.env` file** in the root directory:
+   ```env
+   MONGO_URI=<your-mongodb-atlas-uri>
+   JWT_SECRET=supersecretkey
+   JWT_EXPIRES=1d
+   OPENAI_API_KEY=<your-openai-api-key>
+   # (Optional) LiveKit and RabbitMQ configs
+   LIVEKIT_API_KEY=...
+   LIVEKIT_API_SECRET=...
+   AMQP_URL=amqp://localhost:5672
+   ```
+3. **Run the development server**:
+   ```bash
+   npm run start:dev
+   ```
+
+---
+
+## API Documentation
 
 After starting the server, open your browser and navigate to:
-
 ```
 http://localhost:3000/api
 ```
-
 You’ll find a full Swagger UI where you can test all available routes.
 
 ---
 
-## Available Endpoints
+## Key Endpoints
 
-### 🔸 `POST /auth/register`
-
+### `POST /auth/register`
 Registers a new user.
 
-📥 Request Body:
-
-```json
-{
-  "firstName": "Mahmoud",
-  "lastName": "Essam",
-  "username": "essamDev",
-  "email": "essam@example.com",
-  "password": "12345678",
-  "skills": ["NestJS", "MongoDB"],
-  "socialLinks": [{ "title": "GitHub", "url": "https://github.com/essam" }],
-  "birthdate": "2000-01-15",
-  "gender": "male"
-}
-```
-
----
-
-### 🔸 `POST /auth/login`
-
+### `POST /auth/login`
 Logs in the user and returns a JWT token.
 
-📥 Request Body:
+### `GET /auth/profile` (Protected)
+Fetches the authenticated user's profile. Requires Bearer Token.
 
+### `POST /ai-agent/code-help` (Protected)
+Get AI-powered suggestions for fixing code problems. Requires Bearer Token.
+
+**Request Body Example:**
 ```json
 {
-  "email": "essam@example.com",
-  "password": "12345678"
+  "code": "function add(a, b) { return a - b; }",
+  "description": "The add function is not working correctly",
+  "language": "javascript"
+}
+```
+**Response Example:**
+```json
+{
+  "suggestions": "- Check the operator in your return statement..."
 }
 ```
 
-📤 Response:
+### `POST /livekit/rooms` (Protected)
+Create a new LiveKit room for real-time collaboration.
 
-```json
-{
-  "message": "Login successful",
-  "user": { ... },
-  "token": "Bearer eyJhbGciOiJIUzI1NiIs..."
-}
-```
+### `GET /livekit/token?secretId=...` (Protected)
+Get a LiveKit access token for joining a room.
 
 ---
 
-### 🔸 `GET /auth/profile` (Protected)
+## Real-Time Notifications
 
-Fetches the authenticated user's profile.
+- Notifications are delivered via WebSockets.
+- Users join their notification room on connection and receive updates for new posts, comments, likes, and more.
 
-🛡 Requires Bearer Token.
+---
 
-📌 Steps:
+## Contributing
 
-1. Click **Authorize** in the Swagger top right.
-2. Paste your token like this:
+Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
 
-```
-Bearer eyJhbGciOiJIUzI1NiIs...
-```
+---
 
-3. Click "Execute" to get full user profile data.
+## License
+
+This project is UNLICENSED. See the [LICENSE](LICENSE) file for details.
