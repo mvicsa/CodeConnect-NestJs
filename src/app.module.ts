@@ -13,6 +13,7 @@ import { GroupModule } from './group/group.module';
 import { LivekitModule } from './livekit/livekit.module';
 import { NotificationModule } from './notification/notification.module';
 import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
+import { SearchModule } from './search/search.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
     LivekitModule,
     NotificationModule,
     RabbitMQModule,
+    SearchModule
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -70,6 +70,9 @@ export class Post {
 
   @Prop()
   updatedAt?: Date;
+
+  @Prop({ default: false })
+  hasAiSuggestions?: boolean;
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);
