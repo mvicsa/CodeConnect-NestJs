@@ -7,10 +7,11 @@ import {
   NotificationDocument,
   NotificationType,
 } from './entities/notification.schema';
-import { Model } from 'mongoose';
+import { Model, ObjectId } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import { Notification } from './entities/notification.schema';
 import { NotificationGateway } from './notification.gateway';
+import { UsersService } from 'src/users/users.service';
 
 @Controller()
 export class NotificationListener {
@@ -22,6 +23,7 @@ export class NotificationListener {
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
     private readonly gateway: NotificationGateway,
+    private readonly userService: UsersService,
   ) {
     this.logger.log('✅ NotificationListener initialized');
   }
@@ -35,33 +37,31 @@ export class NotificationListener {
     this.logger.log('🔥 handleUserLogin triggered');
     this.logger.log(
       `📨 Received user.login event for: ${notificationDto.content}`,
+      notificationDto,
     );
-    this.logger.log(
-      `📨 Received user.login event for: ${notificationDto.toUserId}`,
-    );
+    // Acknowledge the message
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
 
     try {
       // Save notification to the database
       const createdNotification = await this.notificationService.create({
-        ...notificationDto,
+        toUserId: notificationDto.toUserId,
+        content: `User ${notificationDto.content} logged in`,
+        data: notificationDto.data,
+        fromUserId: notificationDto.fromUserId,
         type: NotificationType.LOGIN,
       });
       // await this.notificationService.create(notificationDto);
+      console.log('createdNotification in listener', createdNotification);
       this.logger.log(`💾 Notification saved: ${createdNotification._id}`);
 
-      // Acknowledge the message
-      const channel = context.getChannelRef();
-      const originalMsg = context.getMessage();
-
-      if (originalMsg?.fields?.deliveryTag) {
-        channel.ack(originalMsg);
-        this.logger.log(
-          `✅ Acknowledged message with tag: ${originalMsg.fields.deliveryTag}`,
-        );
-      } else {
-        this.logger.warn(`⚠️ No deliveryTag found, skipping ack`);
-      }
+      channel.ack(originalMsg);
+      this.logger.log(
+        `✅ Acknowledged message with tag: ${originalMsg.fields.deliveryTag}`,
+      );
     } catch (err) {
+      channel.nack(originalMsg, false, false); // ❌ reject and drop
       this.logger.error(`❌ Ack or Save failed: ${err.message}`, err.stack);
     }
   }
@@ -79,38 +79,42 @@ export class NotificationListener {
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
     try {
-      this.logger.log(`Processing post.created for postId: ${data.content}`);
+      this.logger.log(`Processing post.created for `, data);
 
       // Save notification to the database
       //     // Fetch followers (import UserService or use a message pattern to communicate with UserModule)
-      //     // const userService = this.moduleRef.get<UserService>(UserService, {
-      //     //   strict: false,
-      //     // }); // Or use RabbitMQ to fetch followers
-      //     // const followers: string[] = await userService.getFollowers(data.toUserId);
+      const userService = this.moduleRef.get<UsersService>(UsersService, {
+        strict: false,
+      });
+      const followers: any[] = await userService.getFollowers(data.toUserId);
 
-      // if (notifications.length === 0) {
-      //   this.logger.log('⚠️ No followers found, skipping notification creation');
-      //   channel.ack(originalMsg);
-      //   return;
-      // }
+      if (followers.length === 0) {
+        this.logger.log(
+          '⚠️ No followers found, skipping notification creation',
+        );
+        channel.ack(originalMsg);
+        return;
+      }
+      const followerIds = followers.map((f) => f._id); // string[]
+      console.log('followers', followers, followerIds);
+      // Create notifications for each follower
+      const notifications: CreateNotificationDto[] = followers.map(
+        (follower) => ({
+          toUserId: follower._id as string,
+          fromUserId: data.toUserId,
+          content: `User ${data.toUserId} created a new post`,
+          type: NotificationType.POST_CREATED,
+          data: data.data,
+        }),
+      );
 
-      //     // Create notifications for each follower
-      //     // const notifications: CreateNotificationDto[] = followers.map(
-      //     //   (followerId) => ({
-      //     //     toUserId: followerId,
-      //     //     fromUserId: data.toUserId,
-      //     //     content: `User ${data.toUserId} created a new post: ${data.content || data.postId}`,
-      //     //     type: NotificationType.POST_CREATED,
-      //     //     data: { postId: data.postId },
-      //     //   }),
-      //     // );
-
-      //     //const notificationPromises = await this.notificationService.addNotifications(notifications);
-      // console.log('we created a notifications', notificationPromises);
+      const notificationPromises =
+        await this.notificationService.addNotifications(notifications);
+      console.log('we created a notifications', notificationPromises);
       // await Promise.all(notificationPromises);
-      //     // this.logger.log(
-      //     //   `💾 Created notifications for ${followers.length} followers`,
-      //     // );
+      this.logger.log(
+        `💾 Created notifications for ${followers.length} followers`,
+      );
 
       // Acknowledge the message
 
@@ -131,26 +135,53 @@ export class NotificationListener {
   //---------------> 3
   @EventPattern('post.reaction')
   async handlePostLiked(
-    @Payload() notificationDto: CreateNotificationDto,
+    @Payload() data: CreateNotificationDto,
     @Ctx() context: RmqContext,
   ) {
-    this.logger.log('🔥 handlePostLiked triggered');
-    this.logger.log(
-      `📨 Received post.reaction event for postId: ${notificationDto.data?.postId}`,
-    );
+    this.logger.log('🔥 handlePostLiked triggered', data);
+    this.logger.log(`📨 Received post.reaction event for`, data);
 
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
     try {
       const createdNotification = await this.notificationService.create({
-        ...notificationDto,
+        toUserId: data.toUserId,
+        fromUserId: data.fromUserId,
+        data: data.data,
         type: NotificationType.POST_REACTION,
-        content: `Your post was reaction by ${notificationDto.fromUserId || 'someone'}`,
+        content: `Your post has been reacted to by ${data.fromUserId || 'someone'}`,
       });
       this.logger.log(`💾 Notification saved: ${createdNotification._id}`);
+
+      const followers: any[] = await this.userService.getFollowers(
+        data.toUserId,
+      );
+      const notifications = followers
+        .map((follower): CreateNotificationDto | undefined => {
+          if (follower._id != data.fromUserId) {
+            return {
+              toUserId: follower._id.toString(),
+              fromUserId: data.fromUserId,
+              data: data.data,
+              type: NotificationType.POST_REACTION,
+              content: `A post for a person you follow has been reacted to by ${data.fromUserId || 'someone'}`,
+            };
+          }
+          return undefined;
+        })
+        .filter((n): n is CreateNotificationDto => Boolean(n)); // <-- fixes type issue
+
+      const notificationPromises =
+        await this.notificationService.addNotifications(notifications);
+      console.log('we created a notifications', notificationPromises);
+      // await Promise.all(notificationPromises);
+      this.logger.log(
+        `💾 Created notifications for ${followers.length} followers`,
+      );
+
       channel.ack(originalMsg);
       this.logger.log(
-        `✅ Acknowledged post.reaction for postId: ${notificationDto.data?.postId}`,
+        `✅ Acknowledged post.reaction for postId: ${data.data?.postId}`,
       );
     } catch (error) {
       this.logger.error(
@@ -164,44 +195,40 @@ export class NotificationListener {
 
   //---------------> 4
 
-  // @EventPattern('comment.added') ===> correct ok
-  // async handleCommentAdded(
-  //   @Payload() data: createNotificationDto,
-  //   @Ctx() context: RmqContext,
-  // ) {
-  //   this.logger.log('🔥 handleCommentAdded triggered');
-  //   this.logger.log(
-  //     `📨 Received comment.added event for commentId: ${data.commentId}`,
-  //   );
+  @EventPattern('comment.added')
+  async handleCommentAdded(
+    @Payload() data: CreateNotificationDto,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log('🔥 handleCommentAdded triggered');
+    this.logger.log(`📨 Received comment.added event for comment:`, data);
 
-  //     const channel = context.getChannelRef();
-  //     const originalMsg = context.getMessage();
-  //   try {
-  //     // Fetch post owner (requires UserService or PostService)
-  //     // const postService = this.moduleRef.get(PostService); // Assume PostService exists
-  //     // const post = await postService.findById(data.postId);
-  //     const notification = await this.notificationService.create({
-  //       toUserId: post.toUserId, // Notify post owner
-  //       fromUserId: data.toUserId,
-  //       content: `Your post received a new comment from ${data.toUserId}`,
-  //       type: NotificationType.COMMENT_ADDED,
-  //       data: { commentId: data.commentId, postId: data.postId },
-  //     });
-  //     this.logger.log(`💾 Notification saved: ${notification._id}`);
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+    try {
+      // Fetch post owner (requires UserService or PostService)
+      // const postService = this.moduleRef.get(PostService); // Assume PostService exists
+      // const post = await postService.findById(data.postId);
+      const notification = await this.notificationService.create({
+        toUserId: data.toUserId, // Notify post owner
+        fromUserId: data.fromUserId,
+        content: `Your post received a new comment from ${data.fromUserId || 'someone'}`,
+        type: NotificationType.COMMENT_ADDED,
+        data: data.data,
+      });
+      this.logger.log(`💾 Notification saved: ${notification._id}`);
 
-  //     channel.ack(originalMsg);
-  //     this.logger.log(
-  //       `✅ Acknowledged comment.added for commentId: ${data.commentId}`,
-  //     );
-  //   } catch (error) {
-  //     this.logger.error(
-  //       `❌ Failed to process comment.added: ${error.message}`,
-  //       error.stack,
-  //     );
-  //     // Optionally requeue:
-  //  channel.nack(originalMsg, false, true);
-  //   }
-  // }
+      channel.ack(originalMsg);
+      this.logger.log(`✅ Acknowledged comment.added for commentId:`, data);
+    } catch (error) {
+      this.logger.error(
+        `❌ Failed to process comment.added: ${error.message}`,
+        error.stack,
+      );
+      // Optionally requeue:
+      channel.nack(originalMsg, false, true);
+    }
+  }
 
   //---------------> 5
   @EventPattern('user.followed')
@@ -217,7 +244,7 @@ export class NotificationListener {
         fromUserId: data.fromUserId,
         content: `You were followed by ${data.fromUserId}`,
         type: NotificationType.FOLLOWED_USER,
-        data: { follower: data.fromUserId },
+        data: data.data,
       });
       channel.ack(originalMsg);
     } catch (error) {

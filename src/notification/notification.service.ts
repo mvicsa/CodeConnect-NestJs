@@ -17,7 +17,7 @@ export class NotificationService {
 
   async create(dto: CreateNotificationDto) {
     const created = new this.notificationModel(dto);
-    this.gateway.sendNotificationToUser(dto.toUserId, created);
+    this.gateway.sendNotificationToUser(dto?.toUserId, created);
     console.log('we created a notification', created);
     return created.save();
   }
@@ -37,7 +37,7 @@ export class NotificationService {
   async addNotifications(notifications: CreateNotificationDto[]) {
     try {
       const created = await this.notificationModel.insertMany(notifications);
-      this.gateway.sendToUsers(created); // (dto.toUserId, created);
+      this.gateway.sendToUsers(created);
       return created;
     } catch (error) {
       console.error('Error adding notifications: in addNotifications', error);

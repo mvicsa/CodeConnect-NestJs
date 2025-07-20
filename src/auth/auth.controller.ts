@@ -54,8 +54,9 @@ export class AuthController {
     try {
       await this.client.connect();
       const response = await this.authService.login(loginDto);
+      console.log('response', response);
       this.client.emit('user.login', {
-        userId: response.user._id,
+        toUserId: response.user._id,
         content: response.message,
         type: 'user',
         data: response.user,

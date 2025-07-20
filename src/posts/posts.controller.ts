@@ -11,6 +11,7 @@ import {
   HttpStatus,
   UseGuards,
   Req,
+  Inject,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { Post as PostModel } from './shemas/post.schema';
@@ -25,12 +26,17 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
+import { ClientProxy } from '@nestjs/microservices';
+import { NotificationType } from 'src/notification/entities/notification.schema';
 
 @ApiTags('Posts')
 @ApiBearerAuth()
 @Controller('posts')
 export class PostsController {
-  constructor(private readonly postsService: PostsService) {}
+  constructor(
+    private readonly postsService: PostsService,
+    @Inject('RABBITMQ_PRODUCER') private readonly client: ClientProxy,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -124,7 +130,20 @@ export class PostsController {
     @Body() body: Omit<PostModel, '_id' | 'createdBy'>,
     @Req() req: Request & { user: any },
   ) {
-    return this.postsService.create(body, req.user.sub);
+    console.log('body', body, req.user);
+    const response = this.postsService.create(body, req.user.sub);
+
+    // ---------------------------------------> emit the post.created event
+    this.client.emit('post.created', {
+      toUserId: req.user.sub,
+      data: response,
+      fromUserId: req.user.sub,
+      type: NotificationType.POST_CREATED,
+      content: 'New post created',
+    });
+    console.log('we emitted the post.created event', response);
+
+    return response;
   }
 
   @Post(':id/reactions')
@@ -147,12 +166,23 @@ export class PostsController {
     @Body() body: { reaction: string },
     @Req() req: Request & { user: any },
   ) {
-    return this.postsService.addOrUpdateReaction(
+    const response = await this.postsService.addOrUpdateReaction(
       postId,
       req.user.sub,
       req.user.username,
       body.reaction,
     );
+
+    // ---------------------------------------> emit the post.reaction event
+    this.client.emit('post.reaction', {
+      toUserId: (response.createdBy as any)._id.toString(),
+      data: response,
+      fromUserId: req.user.sub,
+      type: NotificationType.POST_REACTION,
+      content: 'New reaction added to your post',
+    });
+    console.log('we emitted the post.reaction event emojied', response);
+    return response;
   }
 
   @Put(':id')

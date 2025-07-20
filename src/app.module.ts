@@ -33,7 +33,7 @@ import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
     GroupModule,
     LivekitModule,
     NotificationModule,
-    RabbitMQModule
+    RabbitMQModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -2,15 +2,21 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Inject,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Comment, CommentDocument } from './shemas/comment.schema';
+import { ClientProxy } from '@nestjs/microservices';
+import { NotificationType } from 'src/notification/entities/notification.schema';
+import { PostsService } from './posts.service';
 
 @Injectable()
 export class CommentsService {
   constructor(
     @InjectModel(Comment.name) private commentModel: Model<CommentDocument>,
+    @Inject('RABBITMQ_PRODUCER') private readonly client: ClientProxy,
+    private readonly postsService: PostsService,
   ) {}
 
   async create(
@@ -25,6 +31,18 @@ export class CommentsService {
     await created.populate({
       path: 'userReactions.userId',
       select: '_id firstName lastName avatar role',
+    });
+    const post = await this.postsService.findOne(
+      data.postId as unknown as string,
+    ); // ❌ hacky
+
+    console.log('created comment', created, post);
+    this.client.emit('comment.added', {
+      toUserId: (post.createdBy as any)._id.toString(),
+      fromUserId: userId,
+      data: created,
+      type: NotificationType.COMMENT_ADDED,
+      content: 'New comment is created in a your post',
     });
 
     return created;

@@ -1,15 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './shemas/user.schema';
-import { NotificationService } from '../notification/notification.service';
-import { NotificationType } from '../notification/entities/notification.schema';
+import { NotificationService } from 'src/notification/notification.service';
+import { NotificationType } from 'src/notification/entities/notification.schema';
+import { ClientProxy } from '@nestjs/microservices';
+// import { NotificationService } from '../notification/notification.service';
+// import { NotificationType } from '../notification/entities/notification.schema';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    private readonly notificationService: NotificationService,
+    @Inject('RABBITMQ_PRODUCER') private readonly client: ClientProxy,
   ) {}
 
   async findByUsername(username: string) {
@@ -40,7 +43,7 @@ export class UsersService {
     await user.save();
     await targetUser.save();
     // Send notification
-    await this.notificationService.create({
+    this.client.emit('user.followed', {
       toUserId: targetUserId,
       fromUserId: userId,
       content: `${user.username} followed you`,

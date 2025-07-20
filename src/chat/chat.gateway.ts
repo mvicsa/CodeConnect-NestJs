@@ -220,13 +220,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       data.emoji,
     );
     // Broadcast updated message to room
-    this.server
-      .to(data.roomId)
-      .emit('chat:react_message', {
-        message: updatedMessage,
-        userId,
-        emoji: data.emoji,
-      });
+    this.server.to(data.roomId).emit('chat:react_message', {
+      message: updatedMessage,
+      userId,
+      emoji: data.emoji,
+    });
   }
 
   @SubscribeMessage('group:create')
@@ -294,12 +292,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       data.userId,
     );
     // Notify all group members
-    this.server
-      .to(data.roomId)
-      .emit('group:member_removed', {
-        roomId: data.roomId,
-        userId: data.userId,
-      });
+    this.server.to(data.roomId).emit('group:member_removed', {
+      roomId: data.roomId,
+      userId: data.userId,
+    });
   }
 
   @SubscribeMessage('chat:pin_message')
@@ -313,13 +309,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
     await this.chatService.pinMessage(data.roomId, data.messageId);
-    this.server
-      .to(data.roomId)
-      .emit('chat:pin_message', {
-        roomId: data.roomId,
-        messageId: data.messageId,
-        userId,
-      });
+    this.server.to(data.roomId).emit('chat:pin_message', {
+      roomId: data.roomId,
+      messageId: data.messageId,
+      userId,
+    });
   }
 
   @SubscribeMessage('chat:unpin_message')
@@ -333,13 +327,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
     await this.chatService.unpinMessage(data.roomId, data.messageId);
-    this.server
-      .to(data.roomId)
-      .emit('chat:unpin_message', {
-        roomId: data.roomId,
-        messageId: data.messageId,
-        userId,
-      });
+    this.server.to(data.roomId).emit('chat:unpin_message', {
+      roomId: data.roomId,
+      messageId: data.messageId,
+      userId,
+    });
   }
 
   @SubscribeMessage('createPrivateRoom')

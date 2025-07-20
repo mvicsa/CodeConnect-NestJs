@@ -2,6 +2,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -33,7 +35,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const amqpUrl = configService.get<string>('AMQP_URL');
   if (!amqpUrl) {
-    logger.error('AMQP_URL not set');
+    console.log('AMQP_URL not set');
     process.exit(1);
   }
   const urls = amqpUrl.split(',').map((url) => url.trim());
@@ -68,9 +70,9 @@ async function bootstrap() {
     },
   });
   await app.startAllMicroservices();
-  logger.log(`✅ RabbitMQ connected to queue: ${process.env.RMQ_QUEUE}`);
+  console.log(`✅ RabbitMQ connected to queue: ${process.env.RMQ_QUEUE}`);
   // Log environment variables
-  logger.log(
+  console.log(
     `Environment Variables: ${JSON.stringify({
       AMQP_URL: configService.get<string>('AMQP_URL'),
       RMQ_QUEUE: configService.get<string>('RMQ_QUEUE'),
@@ -80,5 +82,6 @@ async function bootstrap() {
 
   // Start server
   await app.listen(process.env.PORT || 5000);
+  console.log(`✅ Server started on port ${process.env.PORT || 5000}`);
 }
 bootstrap();

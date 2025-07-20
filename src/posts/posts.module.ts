@@ -11,9 +11,11 @@ import {
   CodeSuggestion,
   CodeSuggestionSchema,
 } from './shemas/code-suggestion.schema';
+import { RabbitMQModule } from 'src/rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
+    RabbitMQModule,
     MongooseModule.forFeature([
       { name: Post.name, schema: PostSchema },
       { name: Comment.name, schema: CommentSchema },
@@ -23,5 +25,6 @@ import {
   ],
   providers: [PostsService, CommentsService],
   controllers: [PostsController, CommentsController],
+  
 })
 export class PostsModule {}
