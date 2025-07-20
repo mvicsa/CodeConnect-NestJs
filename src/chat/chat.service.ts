@@ -260,5 +260,50 @@ export class ChatService {
     return roomsWithMessages;
   }
 
+  async createPrivateRoom(senderId: string, receiverId: string) {
+    console.log('[SERVICE] Creating private room between:', { senderId, receiverId });
+    
+    try {
+      // Check if a private room already exists between these two users
+      const existingRoom = await this.chatRoomModel.findOne({
+        type: 'private',
+        members: {
+          $all: [
+            new Types.ObjectId(senderId),
+            new Types.ObjectId(receiverId)
+          ],
+          $size: 2
+        }
+      }).exec();
+
+      if (existingRoom) {
+        console.log('[SERVICE] Private room already exists:', existingRoom._id);
+        return existingRoom;
+      }
+
+      // Create new private room
+      const newRoom = new this.chatRoomModel({
+        type: 'private',
+        members: [
+          new Types.ObjectId(senderId),
+          new Types.ObjectId(receiverId)
+        ],
+        createdBy: new Types.ObjectId(senderId),
+        groupTitle: null,
+        groupAvatar: null,
+        admins: [],
+        pinnedMessages: []
+      });
+
+      await newRoom.save();
+      console.log('[SERVICE] New private room created:', newRoom._id);
+      
+      return newRoom;
+    } catch (error) {
+      console.error('[SERVICE] Error creating private room:', error);
+      throw error;
+    }
+  }
+
   // Chat business logic will be implemented here
 } 

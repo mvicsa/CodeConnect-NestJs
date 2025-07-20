@@ -249,6 +249,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(data.roomId).emit('chat:unpin_message', { roomId: data.roomId, messageId: data.messageId, userId });
   }
 
+  @SubscribeMessage('createPrivateRoom')
+  async handleCreatePrivateRoom(@MessageBody() data: { receiverId: string }, @ConnectedSocket() client: Socket) {
+    const senderId = (client as any).userId;
+    if (!senderId) {
+      client.emit('chat:error', { message: 'Unauthorized' });
+      return;
+    }
+
+    console.log('[GATEWAY] Creating private room:', { senderId, receiverId: data.receiverId });
+    
+    try {
+      const room = await this.chatService.createPrivateRoom(senderId, data.receiverId);
+      
+      // Join both users to the room
+      client.join((room as any)._id.toString());
+      
+      // Send response using acknowledgment callback
+      const response = { 
+        roomId: (room as any)._id.toString(),
+        room: room
+      };
+      
+      console.log('[GATEWAY] Private room created successfully:', (room as any)._id, 'Response:', response);
+      
+      // Return the response to the client
+      return response;
+    } catch (error) {
+      console.error('[GATEWAY] Error creating private room:', error);
+      throw new Error('Failed to create private room');
+    }
+  }
+
   @SubscribeMessage('chat:get_messages')
   async handleGetMessages(
     @MessageBody() data: { roomId: string; limit?: number; before?: string },
