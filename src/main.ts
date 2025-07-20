@@ -43,14 +43,33 @@ async function bootstrap() {
   }
   const urls = amqpUrl.split(',').map((url) => url.trim());
 
+  // app.connectMicroservice<MicroserviceOptions>({
+  //   transport: Transport.RMQ,
+  //   options: {
+  //     urls,
+  //     queue: 'notifications_queue',
+  //     queueOptions: {
+  //       durable: true,
+  //       // exclusive: true, // ✅ move it here
+  //     },
+  //     noAck: false, // ✅ manual ack allowed
+  //     prefetchCount: 1,
+  //     persistent: true,
+  //     routingKey: '#', // wildcard to match anything
+
+  //   },
+  // });
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
       urls,
-      queue: 'notifications_queue',
-      queueOptions: { durable: true },
-      noAck: false, // ✅ manual ack allowed
-      prefetchCount: 1,
+      exchange: 'notifications_exchange',
+      exchangeType: 'topic',
+      queue: configService.get<string>('RMQ_QUEUE', 'notifications_queue'),
+      queueOptions: { durable: true  },
+      routingKey: '#',
+      noAck: false,
+      prefetchCount: Number(configService.get('RMQ_PREFETCH_COUNT', 1)),
     },
   });
   await app.startAllMicroservices();

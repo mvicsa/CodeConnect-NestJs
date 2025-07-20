@@ -21,21 +21,12 @@ export class NotificationListener {
     private readonly moduleRef: ModuleRef,
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
-    private readonly gateway: NotificationGateway, 
+    private readonly gateway: NotificationGateway,
   ) {
     this.logger.log('✅ NotificationListener initialized');
   }
-  @EventPattern('#')
-  async handleUnknownEvent(@Payload() data: any, @Ctx() context: RmqContext) {
-    const routingKey = context.getPattern();
-    this.logger.warn(
-      `⚠️ Unhandled event with routing key: ${routingKey}, data: ${JSON.stringify(data)}`,
-    );
-    const channel = context.getChannelRef();
-    const originalMsg = context.getMessage();
-    channel.ack(originalMsg);
-  }
 
+  //---------------> 1
   @EventPattern('user.login')
   async handleUserLogin(
     @Payload() notificationDto: CreateNotificationDto,
@@ -46,7 +37,7 @@ export class NotificationListener {
       `📨 Received user.login event for: ${notificationDto.content}`,
     );
     this.logger.log(
-      `📨 Received user.login event for: ${notificationDto.userId}`,
+      `📨 Received user.login event for: ${notificationDto.toUserId}`,
     );
 
     try {
@@ -58,11 +49,6 @@ export class NotificationListener {
       // await this.notificationService.create(notificationDto);
       this.logger.log(`💾 Notification saved: ${createdNotification._id}`);
 
-
-      // this.gateway.sendNotificationToUser(
-      //   createdNotification.userId,
-      //   createdNotification,
-      // );
       // Acknowledge the message
       const channel = context.getChannelRef();
       const originalMsg = context.getMessage();
@@ -80,80 +66,57 @@ export class NotificationListener {
     }
   }
 
-  // const recentNotifications = await this.notificationService.findByUser(notificationDto.userId);
-  // recentNotifications.forEach((notification) =>
-  //   this.notificationGateway.sendNotificationToUser(notificationDto.userId, notification),
-  // );
-
-  // @EventPattern('post.created')
-  // async handlePostCreated(
-  //   @Payload() data: { postId: string; userId: string },
-  //   @Ctx() context: RmqContext,
-  // ) {
-  //   this.logger.log('🔥 handlePostCreated triggered');
-  //   this.logger.log(
-  //     `📨 Received post.created event for postId: ${data.postId}`,
-  //   );
-  //   try {
-  //     // Simulate processing
-  //     this.logger.log(`Processing post.created for postId: ${data.postId}`);
-
-  //     // Acknowledge the message
-  //     const channel = context.getChannelRef();
-  //     const originalMsg = context.getMessage();
-  //     channel.ack(originalMsg);
-  //     this.logger.log(
-  //       `✅ Acknowledged post.created for postId: ${data.postId}`,
-  //     );
-  //   } catch (error) {
-  //     this.logger.error(
-  //       `❌ Failed to process post.created: ${error.message}`,
-  //       error.stack,
-  //     );
-  //   }
-  // }
-
+  //---------------> 2
   @EventPattern('post.created')
   async handlePostCreated(
-    @Payload() data: { postId: string; userId: string; content?: string },
+    @Payload() data: CreateNotificationDto,
     @Ctx() context: RmqContext,
   ) {
     this.logger.log('🔥 handlePostCreated triggered');
     this.logger.log(
-      `📨 Received post.created event for postId: ${data.postId}`,
+      `📨 Received post.created event for postId: ${data.content}`,
     );
-
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
     try {
-      // Fetch followers (import UserService or use a message pattern to communicate with UserModule)
-      // const userService = this.moduleRef.get<UserService>(UserService, {
-      //   strict: false,
-      // }); // Or use RabbitMQ to fetch followers
-      // const followers: string[] = await userService.getFollowers(data.userId);
+      this.logger.log(`Processing post.created for postId: ${data.content}`);
 
-      // Create notifications for each follower
-      // const notifications: CreateNotificationDto[] = followers.map(
-      //   (followerId) => ({
-      //     userId: followerId,
-      //     fromUserId: data.userId,
-      //     content: `User ${data.userId} created a new post: ${data.content || data.postId}`,
-      //     type: NotificationType.POST_CREATED,
-      //     data: { postId: data.postId },
-      //   }),
-      // );
+      // Save notification to the database
+      //     // Fetch followers (import UserService or use a message pattern to communicate with UserModule)
+      //     // const userService = this.moduleRef.get<UserService>(UserService, {
+      //     //   strict: false,
+      //     // }); // Or use RabbitMQ to fetch followers
+      //     // const followers: string[] = await userService.getFollowers(data.toUserId);
 
-      // await this.notificationService.addNotifications(notifications);
+      // if (notifications.length === 0) {
+      //   this.logger.log('⚠️ No followers found, skipping notification creation');
+      //   channel.ack(originalMsg);
+      //   return;
+      // }
 
+      //     // Create notifications for each follower
+      //     // const notifications: CreateNotificationDto[] = followers.map(
+      //     //   (followerId) => ({
+      //     //     toUserId: followerId,
+      //     //     fromUserId: data.toUserId,
+      //     //     content: `User ${data.toUserId} created a new post: ${data.content || data.postId}`,
+      //     //     type: NotificationType.POST_CREATED,
+      //     //     data: { postId: data.postId },
+      //     //   }),
+      //     // );
+
+      //     //const notificationPromises = await this.notificationService.addNotifications(notifications);
+      // console.log('we created a notifications', notificationPromises);
       // await Promise.all(notificationPromises);
-      // this.logger.log(
-      //   `💾 Created notifications for ${followers.length} followers`,
-      // );
+      //     // this.logger.log(
+      //     //   `💾 Created notifications for ${followers.length} followers`,
+      //     // );
 
       // Acknowledge the message
-      const channel = context.getChannelRef();
-      const originalMsg = context.getMessage();
+
       channel.ack(originalMsg);
       this.logger.log(
-        `✅ Acknowledged post.created for postId: ${data.postId}`,
+        `✅ Acknowledged post.created for postId: ${data.data.postId}`,
       );
     } catch (error) {
       this.logger.error(
@@ -161,75 +124,49 @@ export class NotificationListener {
         error.stack,
       );
       // Optionally requeue: channel.nack(originalMsg, false, true);
+      channel.nack(originalMsg, false, true);
     }
   }
 
-  // @EventPattern('post.liked')
-  // async handlePostLiked(
-  //   @Payload() notificationDto: CreateNotificationDto,
-  //   @Ctx() context: RmqContext,
-  // ) {
-  //   this.logger.log('🔥 handlePostLiked triggered');
-  //   this.logger.log(
-  //     `📨 Received post.liked event for postId: ${notificationDto.content}`,
-  //   );
-  //   try {
-  //     // Simulate processing
-  //     this.logger.log(
-  //       `Processing post.liked for postId: ${notificationDto.data}`,
-  //     );
-
-  //     // Acknowledge the message
-  //     const channel = context.getChannelRef();
-  //     const originalMsg = context.getMessage();
-  //     channel.ack(originalMsg);
-  //     this.logger.log(
-  //       `✅ Acknowledged post.liked for postId: ${notificationDto}`,
-  //     );
-  //   } catch (error) {
-  //     this.logger.error(
-  //       `❌ Failed to process post.liked: ${error?.message ?? 'Unknown error'}`,
-  //       error?.stack,
-  //     );
-  //   }
-  // }
-  @EventPattern('post.liked')
+  //---------------> 3
+  @EventPattern('post.reaction')
   async handlePostLiked(
     @Payload() notificationDto: CreateNotificationDto,
     @Ctx() context: RmqContext,
   ) {
     this.logger.log('🔥 handlePostLiked triggered');
     this.logger.log(
-      `📨 Received post.liked event for postId: ${notificationDto.data?.postId}`,
+      `📨 Received post.reaction event for postId: ${notificationDto.data?.postId}`,
     );
 
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
     try {
       const createdNotification = await this.notificationService.create({
         ...notificationDto,
-        type: NotificationType.POST_LIKED,
-        content: `Your post was liked by ${notificationDto.fromUserId || 'someone'}`,
+        type: NotificationType.POST_REACTION,
+        content: `Your post was reaction by ${notificationDto.fromUserId || 'someone'}`,
       });
       this.logger.log(`💾 Notification saved: ${createdNotification._id}`);
-
-      const channel = context.getChannelRef();
-      const originalMsg = context.getMessage();
       channel.ack(originalMsg);
       this.logger.log(
-        `✅ Acknowledged post.liked for postId: ${notificationDto.data?.postId}`,
+        `✅ Acknowledged post.reaction for postId: ${notificationDto.data?.postId}`,
       );
     } catch (error) {
       this.logger.error(
-        `❌ Failed to process post.liked: ${error.message}`,
+        `❌ Failed to process post.reaction: ${error.message}`,
         error.stack,
       );
-      // Optionally requeue: channel.nack(originalMsg, false, true);
+      // Optionally requeue:
+      channel.nack(originalMsg, false, true);
     }
   }
 
+  //---------------> 4
+
   // @EventPattern('comment.added') ===> correct ok
-  // @EventPattern('comment.added')
   // async handleCommentAdded(
-  //   @Payload() data: { commentId: string; postId: string; userId: string },
+  //   @Payload() data: createNotificationDto,
   //   @Ctx() context: RmqContext,
   // ) {
   //   this.logger.log('🔥 handleCommentAdded triggered');
@@ -237,21 +174,21 @@ export class NotificationListener {
   //     `📨 Received comment.added event for commentId: ${data.commentId}`,
   //   );
 
+  //     const channel = context.getChannelRef();
+  //     const originalMsg = context.getMessage();
   //   try {
   //     // Fetch post owner (requires UserService or PostService)
   //     // const postService = this.moduleRef.get(PostService); // Assume PostService exists
   //     // const post = await postService.findById(data.postId);
   //     const notification = await this.notificationService.create({
-  //       userId: post.userId, // Notify post owner
-  //       fromUserId: data.userId,
-  //       content: `Your post received a new comment from ${data.userId}`,
+  //       toUserId: post.toUserId, // Notify post owner
+  //       fromUserId: data.toUserId,
+  //       content: `Your post received a new comment from ${data.toUserId}`,
   //       type: NotificationType.COMMENT_ADDED,
   //       data: { commentId: data.commentId, postId: data.postId },
   //     });
   //     this.logger.log(`💾 Notification saved: ${notification._id}`);
 
-  //     const channel = context.getChannelRef();
-  //     const originalMsg = context.getMessage();
   //     channel.ack(originalMsg);
   //     this.logger.log(
   //       `✅ Acknowledged comment.added for commentId: ${data.commentId}`,
@@ -261,33 +198,66 @@ export class NotificationListener {
   //       `❌ Failed to process comment.added: ${error.message}`,
   //       error.stack,
   //     );
-  //     // Optionally requeue: channel.nack(originalMsg, false, true);
+  //     // Optionally requeue:
+  //  channel.nack(originalMsg, false, true);
   //   }
   // }
 
-  // notification.service.ts
-  async deleteOldNotifications(days: number) {
-    const threshold = new Date();
-    threshold.setDate(threshold.getDate() - days);
-    return this.notificationModel
-      .deleteMany({ createdAt: { $lt: threshold } })
-      .exec();
-  }
-
+  //---------------> 5
   @EventPattern('user.followed')
   async handleUserFollowed(
-    @Payload() data: { userId: string; followerId: string },
+    @Payload() data: CreateNotificationDto,
     @Ctx() context: RmqContext,
   ) {
-    await this.notificationService.create({
-      userId: data.userId,
-      fromUserId: data.followerId,
-      content: `You were followed by ${data.followerId}`,
-      type: NotificationType.FOLLOWED_USER,
-      data: { followerId: data.followerId },
-    });
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
-    channel.ack(originalMsg);
+    try {
+      await this.notificationService.create({
+        toUserId: data.toUserId,
+        fromUserId: data.fromUserId,
+        content: `You were followed by ${data.fromUserId}`,
+        type: NotificationType.FOLLOWED_USER,
+        data: { follower: data.fromUserId },
+      });
+      channel.ack(originalMsg);
+    } catch (error) {
+      console.log('error in user.followed', error);
+      channel.nack(originalMsg);
+    }
   }
+
+  //---------------> 6
+  @EventPattern('message.received')
+  async handleMessageReceived(
+    @Payload() data: CreateNotificationDto,
+    @Ctx() context: RmqContext,
+  ) {
+    console.log('In handleMessageReceived', data, context);
+    const channel = context.getChannelRef();
+    const originalMsg = context.getMessage();
+    try {
+      await this.notificationService.create({
+        toUserId: data.toUserId,
+        content: `You have received a message from ${data.fromUserId}`,
+        type: NotificationType.MESSAGE_RECEIVED,
+        data: data.data,
+        fromUserId: data.fromUserId,
+      });
+      channel.ack(originalMsg);
+    } catch (error) {
+      console.log('Error in the part of handleMessage received ok ', error);
+      channel.nack(originalMsg);
+    }
+  }
+
+  // @EventPattern('#')
+  // async handleUnknownEvent(@Payload() data: any, @Ctx() context: RmqContext) {
+  //   const routingKey = context.getPattern();
+  //   this.logger.warn(
+  //     `⚠️ Unhandled event with routing key: ${routingKey}, data: ${JSON.stringify(data)}`,
+  //   );
+  //   const channel = context.getChannelRef();
+  //   const originalMsg = context.getMessage();
+  //   channel.ack(originalMsg);
+  // }
 }
