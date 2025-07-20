@@ -105,7 +105,7 @@ export class PostsService {
   }
 
   async findByTag(tag: string): Promise<Post[]> {
-    return this.postModel.find({ tags: tag })
+    return this.postModel.find({ tags: { $regex: new RegExp(`^${tag}$`, 'i') } })
       .sort({ createdAt: -1 })
       .populate('createdBy', '-password')
       .populate({
@@ -183,5 +183,22 @@ export class PostsService {
     });
     
     return post;
+  }
+
+  // Remove getAllTags and add trending tags
+  async getTrendingTags(): Promise<{ name: string; count: number }[]> {
+    try {
+      const result = await this.postModel.aggregate([
+        { $unwind: { path: '$tags', preserveNullAndEmptyArrays: false } },
+        { $group: { _id: '$tags', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 },
+        { $project: { _id: 0, name: '$_id', count: 1 } }
+      ]);
+      return result;
+    } catch (error) {
+      console.error('Error in getTrendingTags:', error.message, error.stack);
+      return [];
+    }
   }
 } 
