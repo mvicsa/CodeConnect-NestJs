@@ -8,6 +8,8 @@ export function generateSecretId(): string {
 export function generateUniqueSecretId(length: number = 16): string {
   // Generate a unique secret ID with configurable length
   const timestamp = Date.now().toString(36);
-  const random = randomBytes(Math.ceil(length / 2)).toString('hex').toUpperCase();
+  const random = randomBytes(Math.ceil(length / 2))
+    .toString('hex')
+    .toUpperCase();
   return `${timestamp}${random}`.slice(0, length);
 }

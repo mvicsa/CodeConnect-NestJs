@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Req, UseGuards, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  UseGuards,
+  Inject,
+  Res,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -13,12 +22,19 @@ import {
   ApiUnauthorizedResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-
+import { ClientProxy } from '@nestjs/microservices';
+import { from } from 'rxjs';
+import { Logger } from '@nestjs/common';
 @ApiTags('Auth')
 @ApiBearerAuth()
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  private readonly logger = new Logger(AuthController.name);
+  constructor(
+    private readonly authService: AuthService,
+    @Inject('RABBITMQ_PRODUCER')
+    private readonly client: ClientProxy,
+  ) {}
 
   @Post('register')
   @ApiCreatedResponse({ description: 'User successfully registered' })
@@ -33,7 +49,24 @@ export class AuthController {
   @ApiOkResponse({ description: 'User logged in successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
   async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+    this.logger.log(`LoginDto ${JSON.stringify(loginDto)}`);
+
+    try {
+      await this.client.connect();
+      const response = await this.authService.login(loginDto);
+      console.log('response', response);
+      this.client.emit('user.login', {
+        toUserId: response.user._id,
+        content: response.message,
+        type: 'user',
+        data: response.user,
+        fromUserId: response.user._id,
+      });
+      this.logger.log(`✅ Emitted user.login event for: ${loginDto.email}`);
+      return response;
+    } catch (error) {
+      this.logger.error(`❌ Failed to emit user.login event: ${error}`);
+    }
   }
 
   @Get('profile')
@@ -62,14 +95,17 @@ export class AuthController {
     try {
       // req.user is set by GitHubStrategy
       const githubUser = req.user;
-      const { user, token } = await this.authService.handleGithubLogin(githubUser);
+      const { user, token } =
+        await this.authService.handleGithubLogin(githubUser);
       // Redirect to frontend with token and user info (encoded)
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       const redirectUrl = `${frontendUrl}/auth/github/callback?token=${token}&user=${encodeURIComponent(JSON.stringify(user))}`;
       return res.redirect(redirectUrl);
     } catch (err) {
       console.error('GitHub OAuth error:', err);
-      return res.status(500).json({ message: 'GitHub OAuth error', error: err.message });
+      return res
+        .status(500)
+        .json({ message: 'GitHub OAuth error', error: err.message });
     }
   }
 }

@@ -1,9 +1,28 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  Req,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { CommentsService } from './comments.service';
 import { Comment as CommentModel } from './shemas/comment.schema';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiParam,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 
 @ApiTags('Comments')
 @ApiBearerAuth()
@@ -22,16 +41,30 @@ export class CommentsController {
         code: { type: 'string', example: "console.log('Hello, world!');" },
         codeLang: { type: 'string', example: 'javascript' },
         postId: { type: 'string', example: 'postObjectId' },
-        parentCommentId: { type: 'string', example: 'parentCommentObjectId', nullable: true },
-        reactions: { type: 'object', example: { like: 0, love: 0, wow: 0, funny: 0, dislike: 0, happy: 0 } },
-        userReactions: { type: 'array', items: { type: 'object' }, example: [] },
+        parentCommentId: {
+          type: 'string',
+          example: 'parentCommentObjectId',
+          nullable: true,
+        },
+        reactions: {
+          type: 'object',
+          example: { like: 0, love: 0, wow: 0, funny: 0, dislike: 0, happy: 0 },
+        },
+        userReactions: {
+          type: 'array',
+          items: { type: 'object' },
+          example: [],
+        },
       },
-      required: ['text', 'postId']
+      required: ['text', 'postId'],
     },
-    description: 'Comment data (without _id, createdBy)'
+    description: 'Comment data (without _id, createdBy)',
   })
   @ApiResponse({ status: 201, description: 'The created comment or reply' })
-  async create(@Body() body: Omit<CommentModel, '_id' | 'createdBy'>, @Req() req: Request & { user: any }) {
+  async create(
+    @Body() body: Omit<CommentModel, '_id' | 'createdBy'>,
+    @Req() req: Request & { user: any },
+  ) {
     return this.commentsService.create(body, req.user.sub);
   }
 
@@ -67,7 +100,11 @@ export class CommentsController {
   @ApiBody({ type: Object, description: 'Partial comment data' })
   @ApiResponse({ status: 200, description: 'The updated comment or reply' })
   @ApiResponse({ status: 404, description: 'Comment not found' })
-  async update(@Param('id') id: string, @Body() body: Partial<CommentModel>, @Req() req: Request & { user: any }) {
+  async update(
+    @Param('id') id: string,
+    @Body() body: Partial<CommentModel>,
+    @Req() req: Request & { user: any },
+  ) {
     return this.commentsService.update(id, body, req.user.sub);
   }
 
@@ -87,13 +124,27 @@ export class CommentsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Add or update a reaction to a comment or reply' })
   @ApiParam({ name: 'id', type: String })
-  @ApiBody({ schema: { type: 'object', properties: { reaction: { type: 'string', example: 'like' } }, required: ['reaction'] } })
-  @ApiResponse({ status: 200, description: 'The updated comment or reply with new reactions' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { reaction: { type: 'string', example: 'like' } },
+      required: ['reaction'],
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The updated comment or reply with new reactions',
+  })
   async addReaction(
     @Param('id') commentId: string,
     @Body() body: { reaction: string },
-    @Req() req: Request & { user: any }
+    @Req() req: Request & { user: any },
   ) {
-    return this.commentsService.addOrUpdateReaction(commentId, req.user.sub, req.user.username, body.reaction);
+    return this.commentsService.addOrUpdateReaction(
+      commentId,
+      req.user.sub,
+      req.user.username,
+      body.reaction,
+    );
   }
-} 
+}

@@ -11,20 +11,21 @@ export class NotificationService {
   constructor(
     @InjectModel('Notification')
     private readonly notificationModel: Model<NotificationDocument>,
-    @Inject(forwardRef(() => NotificationGateway)) // ✅ use forwardRef here
+    @Inject(forwardRef(() => NotificationGateway))
     private readonly gateway: NotificationGateway,
   ) {}
 
   async create(dto: CreateNotificationDto) {
     const created = new this.notificationModel(dto);
-    this.gateway.sendNotificationToUser(dto.userId, created);
+    this.gateway.sendNotificationToUser(dto?.toUserId, created);
+    console.log('we created a notification', created);
     return created.save();
   }
 
-  findByUser(userId: string) {
-    return this.notificationModel.find({ userId }).sort({ createdAt: -1 });
+  findByUser(toUserId: string) {
+    return this.notificationModel.find({ toUserId }).sort({ createdAt: -1 });
   }
-  // notification.service.ts
+
   async markAsRead(notificationId: string) {
     return this.notificationModel.findByIdAndUpdate(
       notificationId,
@@ -34,6 +35,22 @@ export class NotificationService {
   }
 
   async addNotifications(notifications: CreateNotificationDto[]) {
-    return this.notificationModel.insertMany(notifications);
+    try {
+      const created = await this.notificationModel.insertMany(notifications);
+      this.gateway.sendToUsers(created);
+      return created;
+    } catch (error) {
+      console.error('Error adding notifications: in addNotifications', error);
+      throw error;
+    }
+  }
+
+  // notification.service.ts
+  async deleteOldNotifications(days: number) {
+    const threshold = new Date();
+    threshold.setDate(threshold.getDate() - days);
+    return this.notificationModel
+      .deleteMany({ createdAt: { $lt: threshold } })
+      .exec();
   }
 }

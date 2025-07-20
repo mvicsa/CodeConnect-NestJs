@@ -9,4 +9,4 @@ import { AiAgentService } from './ai-agent.service';
   providers: [AiAgentService],
   exports: [AiAgentService],
 })
-export class AiAgentModule {} 
+export class AiAgentModule {}

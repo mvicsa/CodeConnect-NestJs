@@ -15,12 +15,20 @@ export class FileUploadService {
     @InjectModel('UploadedFile') private fileModel: Model<UploadedFileDoc>,
   ) {}
 
-  async uploadBase64File(base64: string, mimetype: string, originalname: string): Promise<string> {
-    const file = await this.fileModel.create({ data: base64, mimetype, originalname });
+  async uploadBase64File(
+    base64: string,
+    mimetype: string,
+    originalname: string,
+  ): Promise<string> {
+    const file = await this.fileModel.create({
+      data: base64,
+      mimetype,
+      originalname,
+    });
     return file._id.toString();
   }
 
   async getFileById(id: string): Promise<UploadedFileDoc | null> {
     return this.fileModel.findById(id).exec();
   }
-} 
+}

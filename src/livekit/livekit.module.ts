@@ -20,4 +20,4 @@ import { User, UserSchema } from '../users/shemas/user.schema';
   providers: [LivekitService],
   exports: [LivekitService],
 })
-export class LivekitModule {} 
+export class LivekitModule {}

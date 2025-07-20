@@ -7,10 +7,15 @@ import { Comment, CommentSchema } from './shemas/comment.schema';
 import { CommentsService } from './comments.service';
 import { CommentsController } from './comments.controller';
 import { AiAgentModule } from '../ai-agent/ai-agent.module';
-import { CodeSuggestion, CodeSuggestionSchema } from './shemas/code-suggestion.schema';
+import {
+  CodeSuggestion,
+  CodeSuggestionSchema,
+} from './shemas/code-suggestion.schema';
+import { RabbitMQModule } from 'src/rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
+    RabbitMQModule,
     MongooseModule.forFeature([
       { name: Post.name, schema: PostSchema },
       { name: Comment.name, schema: CommentSchema },
@@ -20,5 +25,6 @@ import { CodeSuggestion, CodeSuggestionSchema } from './shemas/code-suggestion.s
   ],
   providers: [PostsService, CommentsService],
   controllers: [PostsController, CommentsController],
+  
 })
-export class PostsModule {} 
+export class PostsModule {}

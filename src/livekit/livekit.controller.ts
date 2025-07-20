@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AccessToken } from 'livekit-server-sdk';
 import { InjectModel } from '@nestjs/mongoose';
@@ -6,7 +17,13 @@ import { Model, Schema as MongooseSchema, Types } from 'mongoose';
 import { LivekitSession, LivekitSessionDocument } from './session.schema';
 import { LivekitRoom, LivekitRoomDocument } from './room.schema';
 import { User, UserDocument } from '../users/shemas/user.schema';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { LivekitService } from './livekit.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
@@ -28,22 +45,37 @@ export class LivekitController {
   ) {}
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get LiveKit access token for a room using secret ID (JWT required)' })
+  @ApiOperation({
+    summary:
+      'Get LiveKit access token for a room using secret ID (JWT required)',
+  })
   @ApiQuery({ name: 'secretId', required: true, description: 'Room secret ID' })
-  @ApiResponse({ status: 200, description: 'LiveKit access token', schema: { example: { token: '...' } } })
+  @ApiResponse({
+    status: 200,
+    description: 'LiveKit access token',
+    schema: { example: { token: '...' } },
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Room not found or inactive' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   @UseGuards(JwtAuthGuard)
   @Get('token')
-  async getToken(@Req() req, @Query('secretId') secretId: string): Promise<{ token: string }> {
+  async getToken(
+    @Req() req,
+    @Query('secretId') secretId: string,
+  ): Promise<{ token: string }> {
     try {
       // req.user comes from JwtStrategy: { sub, email, role }
       const userId = req.user?.sub;
       if (!userId) {
-        throw new HttpException('User ID not found in JWT payload', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'User ID not found in JWT payload',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
-      const user = await this.userModel.findById(userId).select('username email');
+      const user = await this.userModel
+        .findById(userId)
+        .select('username email');
       if (!user) {
         throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
       }
@@ -53,17 +85,24 @@ export class LivekitController {
       }
       let roomDocument;
       try {
-        roomDocument = await this.livekitService.findRoomBySecretIdInternal(secretId);
+        roomDocument =
+          await this.livekitService.findRoomBySecretIdInternal(secretId);
       } catch (err) {
         if (err instanceof HttpException) throw err;
-        throw new HttpException('Room not found or inactive', HttpStatus.NOT_FOUND);
+        throw new HttpException(
+          'Room not found or inactive',
+          HttpStatus.NOT_FOUND,
+        );
       }
       const roomName = roomDocument.name;
       const livekitRoomName = roomDocument.secretId; // Use secretId for LiveKit room identifier
       const apiKey = process.env.LIVEKIT_API_KEY;
       const apiSecret = process.env.LIVEKIT_API_SECRET;
       if (!apiKey || !apiSecret) {
-        throw new HttpException('LiveKit API key/secret not set in environment variables', HttpStatus.INTERNAL_SERVER_ERROR);
+        throw new HttpException(
+          'LiveKit API key/secret not set in environment variables',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
       }
       // Store or update session in DB
       let session = await this.sessionModel.findOne({ room: livekitRoomName });
@@ -75,7 +114,11 @@ export class LivekitController {
         });
       }
       // Add participant if not already present
-      if (!session.participants.some((p) => p.userId.toString() === userId.toString())) {
+      if (
+        !session.participants.some(
+          (p) => p.userId.toString() === userId.toString(),
+        )
+      ) {
         session.participants.push({
           userId: new Types.ObjectId(userId),
           username: user.username,
@@ -87,20 +130,34 @@ export class LivekitController {
         identity: userId.toString(),
         name: user.username,
       });
-      at.addGrant({ roomJoin: true, room: livekitRoomName, canPublish: true, canSubscribe: true });
+      at.addGrant({
+        roomJoin: true,
+        room: livekitRoomName,
+        canPublish: true,
+        canSubscribe: true,
+      });
       let token: string;
       try {
         token = await at.toJwt();
       } catch (err) {
-        throw new HttpException('Failed to generate LiveKit token', HttpStatus.INTERNAL_SERVER_ERROR);
+        throw new HttpException(
+          'Failed to generate LiveKit token',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
       }
       if (typeof token !== 'string') {
-        throw new HttpException('Failed to generate LiveKit token', HttpStatus.INTERNAL_SERVER_ERROR);
+        throw new HttpException(
+          'Failed to generate LiveKit token',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
       }
       return { token };
     } catch (error) {
       if (error instanceof HttpException) throw error;
-      throw new HttpException(error.message || 'Internal server error', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        error.message || 'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
@@ -114,11 +171,17 @@ export class LivekitController {
     try {
       const userId = req.user?.sub;
       if (!userId) {
-        throw new HttpException('User ID not found in JWT payload', HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          'User ID not found in JWT payload',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
       return await this.livekitService.createRoom(createRoomDto, userId);
     } catch (error) {
-      throw new HttpException('Failed to create room', HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        'Failed to create room',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
@@ -147,11 +210,18 @@ export class LivekitController {
   @ApiOperation({ summary: 'Update room' })
   @ApiResponse({ status: 200, description: 'Room updated successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Only room creator can update' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Only room creator can update',
+  })
   @ApiResponse({ status: 404, description: 'Room not found' })
   @UseGuards(JwtAuthGuard)
   @Put('rooms/:id')
-  async updateRoom(@Param('id') id: string, @Body() updateRoomDto: UpdateRoomDto, @Req() req) {
+  async updateRoom(
+    @Param('id') id: string,
+    @Body() updateRoomDto: UpdateRoomDto,
+    @Req() req,
+  ) {
     const userId = req.user?.sub;
     if (!userId) {
       throw new Error('User ID not found in JWT payload');
@@ -163,7 +233,10 @@ export class LivekitController {
   @ApiOperation({ summary: 'Delete room' })
   @ApiResponse({ status: 200, description: 'Room deleted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Only room creator can delete' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Only room creator can delete',
+  })
   @ApiResponse({ status: 404, description: 'Room not found' })
   @UseGuards(JwtAuthGuard)
   @Delete('rooms/:id')
@@ -194,7 +267,10 @@ export class LivekitController {
   @ApiOperation({ summary: 'Get room secret ID (only for room creator)' })
   @ApiResponse({ status: 200, description: 'Room secret ID' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Only room creator can access secret ID' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Only room creator can access secret ID',
+  })
   @ApiResponse({ status: 404, description: 'Room not found' })
   @UseGuards(JwtAuthGuard)
   @Get('rooms/:id/secret-id')
@@ -216,4 +292,4 @@ export class LivekitController {
   async joinRoomBySecretId(@Param('secretId') secretId: string) {
     return await this.livekitService.findRoomBySecretId(secretId);
   }
-} 
+}

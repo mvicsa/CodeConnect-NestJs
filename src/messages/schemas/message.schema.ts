@@ -29,7 +29,10 @@ export class Message {
   @Prop({ type: Types.ObjectId, ref: 'Message', default: null })
   replyTo?: Types.ObjectId;
 
-  @Prop({ type: [{ user: { type: Types.ObjectId, ref: 'User' }, emoji: String }], default: [] })
+  @Prop({
+    type: [{ user: { type: Types.ObjectId, ref: 'User' }, emoji: String }],
+    default: [],
+  })
   reactions: { user: Types.ObjectId; emoji: string }[];
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
@@ -45,4 +48,4 @@ export class Message {
   deletedFor: Types.ObjectId[];
 }
 
-export const MessageSchema = SchemaFactory.createForClass(Message); 
+export const MessageSchema = SchemaFactory.createForClass(Message);

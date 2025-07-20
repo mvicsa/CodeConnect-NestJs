@@ -11,7 +11,10 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 @UseGuards(JwtAuthGuard)
 @Controller('chat')
 export class ChatController {
-  constructor(private readonly fileUploadService: FileUploadService, private readonly chatService: ChatService) {}
+  constructor(
+    private readonly fileUploadService: FileUploadService,
+    private readonly chatService: ChatService,
+  ) {}
 
   @Post('uploadBase64')
   async uploadBase64File(
@@ -19,7 +22,11 @@ export class ChatController {
     @Body('mimetype') mimetype: string,
     @Body('originalname') originalname: string,
   ) {
-    const fileId = await this.fileUploadService.uploadBase64File(base64, mimetype, originalname);
+    const fileId = await this.fileUploadService.uploadBase64File(
+      base64,
+      mimetype,
+      originalname,
+    );
     return { url: `/chat/file/${fileId}` };
   }
 
@@ -36,7 +43,11 @@ export class ChatController {
     @Query('limit') limit: string,
     @Query('before') before?: string,
   ) {
-    const messages = await this.chatService.getPaginatedMessages(roomId, parseInt(limit) || 20, before);
+    const messages = await this.chatService.getPaginatedMessages(
+      roomId,
+      parseInt(limit) || 20,
+      before,
+    );
     return { messages };
   }
 
@@ -47,7 +58,10 @@ export class ChatController {
       return res.status(HttpStatus.NOT_FOUND).send('File not found');
     }
     res.setHeader('Content-Type', file.mimetype);
-    res.setHeader('Content-Disposition', `inline; filename="${file.originalname}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${file.originalname}"`,
+    );
     const buffer = Buffer.from(file.data, 'base64');
     return res.send(buffer);
   }
@@ -58,3 +72,4 @@ export class ChatController {
     return await this.chatService.removeUserFromRoom(roomId, userId);
   }
 } 
+

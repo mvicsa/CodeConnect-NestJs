@@ -6,10 +6,12 @@ import { User, UserSchema } from './shemas/user.schema';
 import { ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { NotificationModule } from '../notification/notification.module';
+import { RabbitMQModule } from 'src/rabbitmq/rabbitmq.module';
 
 @Module({
   imports: [
     // MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    RabbitMQModule,
     MongooseModule.forFeatureAsync([
       {
         name: User.name,
@@ -25,18 +27,18 @@ import { NotificationModule } from '../notification/notification.module';
         inject: [ConfigService],
       },
     ]),
-    ClientsModule.register([
-      {
-        name: 'RABBITMQ_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: [process.env.RMQ_URL ?? 'amqp://localhost:5672'],
-          queue: process.env.RMQ_QUEUE ?? 'notifications_queue',
-          queueOptions: { durable: true },
-        },
-      },
-    ]),
-    NotificationModule,
+    // ClientsModule.register([
+    //   {
+    //     name: 'RABBITMQ_SERVICE',
+    //     transport: Transport.RMQ,
+    //     options: {
+    //       urls: [process.env.RMQ_URL ?? 'amqp://localhost:5672'],
+    //       queue: process.env.RMQ_QUEUE ?? 'notifications_queue',
+    //       queueOptions: { durable: true },
+    //     },
+    //   },
+    // ]),
+    // NotificationModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

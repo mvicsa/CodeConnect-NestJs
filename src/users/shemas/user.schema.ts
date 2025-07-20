@@ -39,7 +39,9 @@ export class User {
   @Prop({ default: 'https://randomuser.me/api/portraits/lego/1.jpg' })
   avatar: string;
 
-  @ApiProperty({ default: 'https://images.unsplash.com/photo-1503264116251-35a269479413' })
+  @ApiProperty({
+    default: 'https://images.unsplash.com/photo-1503264116251-35a269479413',
+  })
   @Prop({
     default: 'https://images.unsplash.com/photo-1503264116251-35a269479413',
   })

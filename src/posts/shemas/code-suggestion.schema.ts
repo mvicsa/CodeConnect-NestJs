@@ -18,4 +18,5 @@ export class CodeSuggestion {
   updatedAt?: Date;
 }
 
-export const CodeSuggestionSchema = SchemaFactory.createForClass(CodeSuggestion); 
+export const CodeSuggestionSchema =
+  SchemaFactory.createForClass(CodeSuggestion);

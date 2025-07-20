@@ -8,6 +8,7 @@ import {
   Patch,
   Query,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import {
@@ -17,7 +18,17 @@ import {
 import { isValidObjectId, Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import { Notification } from './entities/notification.schema';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
+@ApiTags('Notifications')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('notifications')
 export class NotificationController {
   constructor(
@@ -26,26 +37,31 @@ export class NotificationController {
     private readonly notificationModel: NotificationModel,
   ) {}
 
-  @Get(':userId')
+  @Get(':toUserId')
+  @ApiOperation({ summary: 'Get user notifications' })
+  @ApiQuery({ name: 'limit', type: Number, required: false })
+  @ApiQuery({ name: 'skip', type: Number, required: false })
+  @ApiQuery({ name: 'isRead', type: String, required: false })
   async getUserNotifications(
-    @Param('userId') userId: string,
+    @Param('toUserId') toUserId: string,
     @Query('limit') limit = 20,
     @Query('skip') skip = 0,
     @Query('isRead') isRead?: string, // Change to string
   ) {
-    const query: any = { userId };
+    const query: any = { toUserId };
     if (isRead !== undefined) {
       query.isRead = isRead === 'true'; // Convert string to boolean
     }
     return this.notificationService
-      .findByUser(userId)
+      .findByUser(toUserId)
       .skip(Number(skip)) // Ensure number type
       .limit(Number(limit)) // Ensure number type
       .exec();
   }
   //  6 user status, 7 notification status
   @Patch(':id/read')
-  async markAsRead(notificationId: string, userId?: string) {
+  @ApiOperation({ summary: 'Mark notification as read' })
+  async markAsRead(notificationId: string, toUserId?: string) {
     if (!isValidObjectId(notificationId)) {
       throw new BadRequestException('Invalid notification ID');
     }
@@ -53,7 +69,7 @@ export class NotificationController {
     if (!notification) {
       throw new NotFoundException('Notification not found');
     }
-    if (userId && notification.userId !== userId) {
+    if (toUserId && notification.toUserId !== toUserId) {
       throw new UnauthorizedException(
         'Not authorized to mark this notification as read',
       );
@@ -65,13 +81,15 @@ export class NotificationController {
     );
   }
 
-  @Patch(':userId/read-all')
-  async markAllAsRead(@Param('userId') userId: string) {
-    return this.notificationModel.markAllAsRead(userId);
+  @Patch(':toUserId/read-all')
+  @ApiOperation({ summary: 'Mark all notifications as read' })
+  async markAllAsRead(@Param('toUserId') toUserId: string) {
+    console.log('here in the part of mark all as read', toUserId);
+    return this.notificationModel.markAllAsRead(toUserId);
   }
 }
 
-// Frontend Usage: When the user logs in, call the API (e.g., GET /notifications/:userId?limit=20&skip=0&isRead=false
+// Frontend Usage: When the user logs in, call the API (e.g., GET /notifications/:toUserId?limit=20&skip=0&isRead=false
 
 //   if (isRead === undefined) {
 //   query.isRead = false; // Default to unread notifications

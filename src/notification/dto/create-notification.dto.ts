@@ -2,7 +2,7 @@ import { IsEnum } from 'class-validator';
 import { NotificationType } from '../entities/notification.schema';
 
 export class CreateNotificationDto {
-  userId: string;
+  toUserId: string;
   fromUserId?: string;
   content: string;
   @IsEnum(NotificationType)

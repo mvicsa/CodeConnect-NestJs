@@ -29,7 +29,7 @@ export class GitHubStrategy extends PassportStrategy(Strategy, 'github') {
     done: any,
   ) {
     const { id, username, displayName, emails, photos } = profile;
-    
+
     const user = {
       githubId: id,
       githubUsername: username,
@@ -38,10 +38,11 @@ export class GitHubStrategy extends PassportStrategy(Strategy, 'github') {
       username: username,
       firstName: displayName?.split(' ')[0] || username,
       lastName: displayName?.split(' ').slice(1).join(' ') || '',
-      avatar: photos?.[0]?.value || 'https://randomuser.me/api/portraits/lego/1.jpg',
+      avatar:
+        photos?.[0]?.value || 'https://randomuser.me/api/portraits/lego/1.jpg',
       isGithubUser: true,
     };
 
     done(null, user);
   }
-} 
+}

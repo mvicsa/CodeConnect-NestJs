@@ -5,7 +5,7 @@ export type NotificationDocument = Notification & Document;
 
 export enum NotificationType {
   POST_CREATED = 'POST_CREATED',
-  POST_LIKED = 'POST_LIKED',
+  POST_REACTION = 'POST_REACTION',
   COMMENT_ADDED = 'COMMENT_ADDED',
   FOLLOWED_USER = 'FOLLOWED_USER',
   MESSAGE_RECEIVED = 'MESSAGE_RECEIVED',
@@ -19,7 +19,7 @@ export enum NotificationType {
 @Schema({ timestamps: true })
 export class Notification {
   @Prop({ required: true })
-  userId: string; // the user who receives the notification
+  toUserId: string; // the user who receives the notification
   @Prop({ required: true })
   content: string; // readable text like you have a new message / comment / post
   @Prop({ required: true, enum: NotificationType })
@@ -32,6 +32,7 @@ export class Notification {
     commentId?: string;
     messageId?: string;
     extra?: Record<string, any>;
+    [key: string]: any; // for flexibility
   }; //can include postId or commentId
   @Prop()
   fromUserId?: string;
@@ -39,50 +40,51 @@ export class Notification {
 
 // ✅ Define statics interface
 export interface NotificationModel extends Model<NotificationDocument> {
-  findByUser(userId: string): Promise<NotificationDocument[]>;
-  markAllAsRead(userId: string): Promise<any>;
-  markAllAsUnread(userId: string): Promise<any>;
+  findByUser(toUserId: string): Promise<NotificationDocument[]>;
+  markAllAsRead(toUserId: string): Promise<any>;
+  markAllAsUnread(toUserId: string): Promise<any>;
 }
 export const NotificationSchema = SchemaFactory.createForClass(Notification);
 // @InjectModel('User') private readonly userModel: Model<UserDocument>
-NotificationSchema.index({ userId: 1, createdAt: -1 });
+NotificationSchema.index({ toUserId: 1, createdAt: -1 });
 NotificationSchema.index({ isRead: 1 });
 
-NotificationSchema.statics.markAllAsRead = function (userId: string) {
-  return this.updateMany({ userId, isRead: false }, { isRead: true });
+NotificationSchema.statics.markAllAsRead = function (toUserId: string) {
+  console.log('here in the part of mark all as read', toUserId);
+  return this.updateMany({ toUserId, isRead: false }, { isRead: true });
 };
 
-NotificationSchema.statics.markAllAsUnread = function (userId: string) {
-  return this.updateMany({ userId, isRead: true }, { isRead: false });
+NotificationSchema.statics.markAllAsUnread = function (toUserId: string) {
+  return this.updateMany({ toUserId, isRead: true }, { isRead: false });
 };
 
-NotificationSchema.statics.findByUser = function (userId: string) {
-  return this.find({ userId }).sort({ createdAt: -1 });
+NotificationSchema.statics.findByUser = function (toUserId: string) {
+  return this.find({ toUserId }).sort({ createdAt: -1 });
 };
-NotificationSchema.statics.deleteAll = function (userId: string) {
-  return this.deleteMany({ userId });
-};
-
-NotificationSchema.statics.countUnread = function (userId: string) {
-  return this.countDocuments({ userId, isRead: false });
+NotificationSchema.statics.deleteAll = function (toUserId: string) {
+  return this.deleteMany({ toUserId });
 };
 
-NotificationSchema.statics.countAll = function (userId: string) {
-  return this.countDocuments({ userId });
+NotificationSchema.statics.countUnread = function (toUserId: string) {
+  return this.countDocuments({ toUserId, isRead: false });
+};
+
+NotificationSchema.statics.countAll = function (toUserId: string) {
+  return this.countDocuments({ toUserId });
 };
 
 NotificationSchema.statics.countByType = function (
-  userId: string,
+  toUserId: string,
   type: NotificationType,
 ) {
-  return this.countDocuments({ userId, type });
+  return this.countDocuments({ toUserId, type });
 };
 
 NotificationSchema.statics.deleteByType = function (
-  userId: string,
+  toUserId: string,
   type: NotificationType,
 ) {
-  return this.deleteMany({ userId, type });
+  return this.deleteMany({ toUserId, type });
 };
 
 NotificationSchema.statics.deleteByPostId = function (postId: string) {
@@ -97,6 +99,6 @@ NotificationSchema.statics.deleteByMessageId = function (messageId: string) {
   return this.deleteMany({ 'data.messageId': messageId });
 };
 
-NotificationSchema.statics.deleteByUserId = function (userId: string) {
-  return this.deleteMany({ userId });
+NotificationSchema.statics.deleteByUserId = function (toUserId: string) {
+  return this.deleteMany({ toUserId });
 };
