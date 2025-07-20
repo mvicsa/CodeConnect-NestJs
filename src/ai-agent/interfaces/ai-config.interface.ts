@@ -3,4 +3,4 @@ export interface AiConfig {
   model: string;
   temperature: number;
   maxTokens: number;
-} 
+}

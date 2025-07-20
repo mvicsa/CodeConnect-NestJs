@@ -43,9 +43,11 @@ CodeConnect-NestJs is a collaborative backend platform built with [NestJS](https
 ## API Documentation
 
 After starting the server, open your browser and navigate to:
+
 ```
 http://localhost:3000/api
 ```
+
 You’ll find a full Swagger UI where you can test all available routes.
 
 ---
@@ -53,18 +55,23 @@ You’ll find a full Swagger UI where you can test all available routes.
 ## Key Endpoints
 
 ### `POST /auth/register`
+
 Registers a new user.
 
 ### `POST /auth/login`
+
 Logs in the user and returns a JWT token.
 
 ### `GET /auth/profile` (Protected)
+
 Fetches the authenticated user's profile. Requires Bearer Token.
 
 ### `POST /ai-agent/code-help` (Protected)
+
 Get AI-powered suggestions for fixing code problems. Requires Bearer Token.
 
 **Request Body Example:**
+
 ```json
 {
   "code": "function add(a, b) { return a - b; }",
@@ -72,7 +79,9 @@ Get AI-powered suggestions for fixing code problems. Requires Bearer Token.
   "language": "javascript"
 }
 ```
+
 **Response Example:**
+
 ```json
 {
   "suggestions": "- Check the operator in your return statement..."
@@ -80,9 +89,11 @@ Get AI-powered suggestions for fixing code problems. Requires Bearer Token.
 ```
 
 ### `POST /livekit/rooms` (Protected)
+
 Create a new LiveKit room for real-time collaboration.
 
 ### `GET /livekit/token?secretId=...` (Protected)
+
 Get a LiveKit access token for joining a room.
 
 ---

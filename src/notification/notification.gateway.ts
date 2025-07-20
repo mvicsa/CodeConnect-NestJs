@@ -44,7 +44,7 @@ export class NotificationGateway {
       client.emit('notification', notification),
     );
   }
- 
+
   sendNotificationToUser(toUserId: string, notification: Notification): void {
     const room = `user:${toUserId}`;
     const clientsInRoom = this.server.sockets.adapter.rooms.get(room);

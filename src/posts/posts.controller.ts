@@ -1,7 +1,28 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, HttpCode, HttpStatus, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { Post as PostModel } from './shemas/post.schema';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiQuery,
+  ApiParam,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
 
@@ -12,10 +33,17 @@ export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all posts with pagination or filter by content type' })
+  @ApiOperation({
+    summary: 'Get all posts with pagination or filter by content type',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
-  @ApiQuery({ name: 'type', required: false, enum: ['code', 'video', 'image'], description: 'Filter posts by content type' })
+  @ApiQuery({
+    name: 'type',
+    required: false,
+    enum: ['code', 'video', 'image'],
+    description: 'Filter posts by content type',
+  })
   @ApiResponse({ status: 200, description: 'List of posts' })
   async findAll(
     @Query('page') page = '1',
@@ -23,7 +51,11 @@ export class PostsController {
     @Query('type') type?: 'code' | 'video' | 'image',
   ) {
     if (type) {
-      return this.postsService.findByContentType(type, Number(page), Number(limit));
+      return this.postsService.findByContentType(
+        type,
+        Number(page),
+        Number(limit),
+      );
     }
     const posts = await this.postsService.findAll(Number(page), Number(limit));
     return posts;
@@ -65,19 +97,33 @@ export class PostsController {
         text: { type: 'string', example: 'This is a test post from Swagger!' },
         code: { type: 'string', example: "console.log('Hello, world!');" },
         codeLang: { type: 'string', example: 'javascript' },
-        tags: { type: 'array', items: { type: 'string' }, example: ['swagger', 'test', 'api'] },
-        reactions: { type: 'object', example: { like: 0, love: 0, wow: 0, funny: 0, dislike: 0, happy: 0 } },
-        userReactions: { type: 'array', items: { type: 'object' }, example: [] },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['swagger', 'test', 'api'],
+        },
+        reactions: {
+          type: 'object',
+          example: { like: 0, love: 0, wow: 0, funny: 0, dislike: 0, happy: 0 },
+        },
+        userReactions: {
+          type: 'array',
+          items: { type: 'object' },
+          example: [],
+        },
         image: { type: 'string', example: 'https://example.com/image.png' },
-        video: { type: 'string', example: 'https://example.com/video.mp4' }
+        video: { type: 'string', example: 'https://example.com/video.mp4' },
       },
-      required: ['text', 'tags']
+      required: ['text', 'tags'],
     },
-    description: 'Post data (without _id, createdBy)'
+    description: 'Post data (without _id, createdBy)',
   })
   @ApiResponse({ status: 201, description: 'The created post' })
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() body: Omit<PostModel, '_id' | 'createdBy'>, @Req() req: Request & { user: any }) {
+  async create(
+    @Body() body: Omit<PostModel, '_id' | 'createdBy'>,
+    @Req() req: Request & { user: any },
+  ) {
     return this.postsService.create(body, req.user.sub);
   }
 
@@ -85,14 +131,28 @@ export class PostsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Add or update a reaction to a post' })
-  @ApiBody({ schema: { type: 'object', properties: { reaction: { type: 'string', example: 'like' } }, required: ['reaction'] } })
-  @ApiResponse({ status: 200, description: 'The updated post with new reactions' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { reaction: { type: 'string', example: 'like' } },
+      required: ['reaction'],
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The updated post with new reactions',
+  })
   async addReaction(
     @Param('id') postId: string,
     @Body() body: { reaction: string },
-    @Req() req: Request & { user: any }
+    @Req() req: Request & { user: any },
   ) {
-    return this.postsService.addOrUpdateReaction(postId, req.user.sub, req.user.username, body.reaction);
+    return this.postsService.addOrUpdateReaction(
+      postId,
+      req.user.sub,
+      req.user.username,
+      body.reaction,
+    );
   }
 
   @Put(':id')
@@ -103,7 +163,11 @@ export class PostsController {
   @ApiBody({ type: Object, description: 'Partial post data' })
   @ApiResponse({ status: 200, description: 'The updated post' })
   @ApiResponse({ status: 404, description: 'Post not found' })
-  async update(@Param('id') id: string, @Body() body: Partial<PostModel>, @Req() req: Request & { user: any }) {
+  async update(
+    @Param('id') id: string,
+    @Body() body: Partial<PostModel>,
+    @Req() req: Request & { user: any },
+  ) {
     return this.postsService.update(id, body, req.user.sub);
   }
 
@@ -124,7 +188,10 @@ export class PostsController {
   @ApiOperation({ summary: 'Get AI code suggestions for a post' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, description: 'Code suggestions for the post' })
-  @ApiResponse({ status: 404, description: 'Post not found or no suggestions available' })
+  @ApiResponse({
+    status: 404,
+    description: 'Post not found or no suggestions available',
+  })
   async getCodeSuggestions(@Param('id') id: string) {
     const suggestion = await this.postsService.getCodeSuggestions(id);
     if (!suggestion) {
@@ -132,4 +199,4 @@ export class PostsController {
     }
     return suggestion;
   }
-} 
+}

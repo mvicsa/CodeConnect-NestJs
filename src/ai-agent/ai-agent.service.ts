@@ -20,8 +20,12 @@ export class AiAgentService {
     this.aiConfig = {
       apiKey,
       model: this.configService.get<string>('OPENAI_MODEL', 'gpt-4o-mini'),
-      temperature: Number(this.configService.get<string>('OPENAI_TEMPERATURE') || 0.9),
-      maxTokens: Number(this.configService.get<string>('OPENAI_MAX_TOKENS') || 500),
+      temperature: Number(
+        this.configService.get<string>('OPENAI_TEMPERATURE') || 0.9,
+      ),
+      maxTokens: Number(
+        this.configService.get<string>('OPENAI_MAX_TOKENS') || 500,
+      ),
     };
 
     this.openai = new OpenAI({
@@ -34,7 +38,9 @@ export class AiAgentService {
    * @param codeHelpRequest The code help request containing code and description
    * @returns Suggestions on how to fix the code problem
    */
-  async getCodeHelpSuggestions(codeHelpRequest: CodeHelpRequestDto): Promise<string> {
+  async getCodeHelpSuggestions(
+    codeHelpRequest: CodeHelpRequestDto,
+  ): Promise<string> {
     try {
       const { code, description, language } = codeHelpRequest;
 
@@ -66,10 +72,14 @@ export class AiAgentService {
         ],
       });
 
-      return response.choices[0]?.message?.content || 'No suggestions available';
+      return (
+        response.choices[0]?.message?.content || 'No suggestions available'
+      );
     } catch (error) {
-      this.logger.error(`Error getting code help suggestions: ${error.message}`);
+      this.logger.error(
+        `Error getting code help suggestions: ${error.message}`,
+      );
       throw new Error('Failed to get code help suggestions');
     }
   }
-} 
+}

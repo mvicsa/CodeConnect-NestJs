@@ -22,9 +22,8 @@ export class AiAgentController {
   async getCodeHelpSuggestions(
     @Body() codeHelpRequest: CodeHelpRequestDto,
   ): Promise<{ suggestions: string }> {
-    const suggestions = await this.aiAgentService.getCodeHelpSuggestions(
-      codeHelpRequest,
-    );
+    const suggestions =
+      await this.aiAgentService.getCodeHelpSuggestions(codeHelpRequest);
     return { suggestions };
   }
-} 
+}

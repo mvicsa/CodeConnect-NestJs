@@ -32,4 +32,4 @@ export class ChatRoom {
   pinnedMessages?: Types.ObjectId[];
 }
 
-export const ChatRoomSchema = SchemaFactory.createForClass(ChatRoom); 
+export const ChatRoomSchema = SchemaFactory.createForClass(ChatRoom);

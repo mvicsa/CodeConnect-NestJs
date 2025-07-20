@@ -7,7 +7,10 @@ import { Comment, CommentSchema } from './shemas/comment.schema';
 import { CommentsService } from './comments.service';
 import { CommentsController } from './comments.controller';
 import { AiAgentModule } from '../ai-agent/ai-agent.module';
-import { CodeSuggestion, CodeSuggestionSchema } from './shemas/code-suggestion.schema';
+import {
+  CodeSuggestion,
+  CodeSuggestionSchema,
+} from './shemas/code-suggestion.schema';
 
 @Module({
   imports: [
@@ -21,4 +24,4 @@ import { CodeSuggestion, CodeSuggestionSchema } from './shemas/code-suggestion.s
   providers: [PostsService, CommentsService],
   controllers: [PostsController, CommentsController],
 })
-export class PostsModule {} 
+export class PostsModule {}

@@ -61,7 +61,7 @@ async function bootstrap() {
       exchange: 'notifications_exchange',
       exchangeType: 'topic',
       queue: configService.get<string>('RMQ_QUEUE', 'notifications_queue'),
-      queueOptions: { durable: true  },
+      queueOptions: { durable: true },
       routingKey: '#',
       noAck: false,
       prefetchCount: Number(configService.get('RMQ_PREFETCH_COUNT', 1)),

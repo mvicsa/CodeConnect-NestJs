@@ -20,4 +20,4 @@ export class CreateMessageDto {
   @IsString()
   @IsOptional()
   replyTo?: string;
-} 
+}

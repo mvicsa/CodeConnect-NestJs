@@ -33,4 +33,4 @@ export class LivekitRoom {
   updatedAt?: Date;
 }
 
-export const LivekitRoomSchema = SchemaFactory.createForClass(LivekitRoom); 
+export const LivekitRoomSchema = SchemaFactory.createForClass(LivekitRoom);

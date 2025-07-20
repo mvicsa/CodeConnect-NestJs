@@ -8,13 +8,21 @@ export class LivekitSession {
   @Prop({ required: true })
   room: string;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'LivekitRoom', required: false })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'LivekitRoom',
+    required: false,
+  })
   roomId?: Types.ObjectId;
 
   @Prop({
     type: [
       {
-        userId: { type: MongooseSchema.Types.ObjectId, ref: 'User', required: true },
+        userId: {
+          type: MongooseSchema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
         username: String,
         joinedAt: Date,
       },
@@ -34,4 +42,5 @@ export class LivekitSession {
   updatedAt?: Date;
 }
 
-export const LivekitSessionSchema = SchemaFactory.createForClass(LivekitSession); 
+export const LivekitSessionSchema =
+  SchemaFactory.createForClass(LivekitSession);

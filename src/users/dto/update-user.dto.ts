@@ -1,5 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsArray, IsDateString, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsArray,
+  IsDateString,
+  IsEnum,
+} from 'class-validator';
 import { Gender } from '../shemas/user.schema';
 
 export class UpdateUserDto {
@@ -65,4 +71,4 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   country?: string;
-} 
+}

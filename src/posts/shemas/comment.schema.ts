@@ -68,4 +68,4 @@ export class Comment {
   updatedAt?: Date;
 }
 
-export const CommentSchema = SchemaFactory.createForClass(Comment); 
+export const CommentSchema = SchemaFactory.createForClass(Comment);

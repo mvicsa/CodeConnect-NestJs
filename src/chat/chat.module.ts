@@ -41,4 +41,4 @@ const UploadedFileSchema = new MongooseSchema({
   providers: [ChatGateway, ChatService, JwtService, FileUploadService],
   exports: [ChatService, FileUploadService],
 })
-export class ChatModule {} 
+export class ChatModule {}

@@ -1,15 +1,23 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, Schema as MongooseSchema } from 'mongoose';
 import { Post, PostDocument } from './shemas/post.schema';
 import { AiAgentService } from '../ai-agent/ai-agent.service';
-import { CodeSuggestion, CodeSuggestionDocument } from './shemas/code-suggestion.schema';
+import {
+  CodeSuggestion,
+  CodeSuggestionDocument,
+} from './shemas/code-suggestion.schema';
 
 @Injectable()
 export class PostsService {
   constructor(
     @InjectModel(Post.name) private postModel: Model<PostDocument>,
-    @InjectModel(CodeSuggestion.name) private codeSuggestionModel: Model<CodeSuggestionDocument>,
+    @InjectModel(CodeSuggestion.name)
+    private codeSuggestionModel: Model<CodeSuggestionDocument>,
     private aiAgentService: AiAgentService,
   ) {}
 
@@ -25,18 +33,19 @@ export class PostsService {
         select: '_id firstName lastName avatar role',
       })
       .exec();
-    
+
     return posts;
   }
 
   async findOne(_id: string): Promise<Post> {
-    const post = await this.postModel.findById(_id)
+    const post = await this.postModel
+      .findById(_id)
       .populate('createdBy', '-password')
       .populate({
         path: 'userReactions.userId',
         select: '_id firstName lastName avatar role',
       });
-    
+
     if (!post) throw new NotFoundException('Post not found');
     return post;
   }
@@ -44,20 +53,21 @@ export class PostsService {
   async create(data: Omit<Post, 'createdBy'>, userId: string): Promise<Post> {
     const created = new this.postModel({ ...data, createdBy: userId });
     await created.save();
-    
+
     // Populate createdBy and userReactions.userId before returning
     await created.populate('createdBy', '-password');
     await created.populate({
       path: 'userReactions.userId',
       select: '_id firstName lastName avatar role',
     });
-    
+
     // If post contains code, generate AI suggestions synchronously
     if (created.code && created.codeLang) {
       try {
         const suggestions = await this.aiAgentService.getCodeHelpSuggestions({
           code: created.code,
-          description: 'Analyze this code and provide suggestions for improvements or potential issues',
+          description:
+            'Analyze this code and provide suggestions for improvements or potential issues',
           language: created.codeLang,
         });
 
@@ -67,45 +77,59 @@ export class PostsService {
           suggestions,
         });
         await codeSuggestion.save();
-        
+
         // Update the post to indicate it has AI suggestions
-        await this.postModel.findByIdAndUpdate(created._id, { hasAiSuggestions: true });
+        await this.postModel.findByIdAndUpdate(created._id, {
+          hasAiSuggestions: true,
+        });
       } catch (error) {
         console.error('Error generating code suggestions:', error);
         // Even if AI suggestion fails, we still return the post
       }
     }
-    
+
     return created;
   }
 
   // Get code suggestions for a post
   async getCodeSuggestions(postId: string): Promise<CodeSuggestion | null> {
-    const suggestion = await this.codeSuggestionModel.findOne({ postId: new Types.ObjectId(postId) });
+    const suggestion = await this.codeSuggestionModel.findOne({
+      postId: new Types.ObjectId(postId),
+    });
     return suggestion;
   }
 
-  async update(_id: string, data: Partial<Post>, userId: string): Promise<Post> {
+  async update(
+    _id: string,
+    data: Partial<Post>,
+    userId: string,
+  ): Promise<Post> {
     const post = await this.postModel.findById(_id);
     if (!post) throw new NotFoundException('Post not found');
-    if (post.createdBy.toString() !== userId) throw new ForbiddenException('You can only edit your own posts');
+    if (post.createdBy.toString() !== userId)
+      throw new ForbiddenException('You can only edit your own posts');
     Object.assign(post, data);
     await post.save();
     // Re-populate createdBy and userReactions.userId
     await post.populate('createdBy', '-password');
-    await post.populate({ path: 'userReactions.userId', select: '_id firstName lastName avatar role' });
+    await post.populate({
+      path: 'userReactions.userId',
+      select: '_id firstName lastName avatar role',
+    });
     return post;
   }
 
   async delete(_id: string, userId: string): Promise<void> {
     const post = await this.postModel.findById(_id);
     if (!post) throw new NotFoundException('Post not found');
-    if (post.createdBy.toString() !== userId) throw new ForbiddenException('You can only delete your own posts');
+    if (post.createdBy.toString() !== userId)
+      throw new ForbiddenException('You can only delete your own posts');
     await this.postModel.deleteOne({ _id });
   }
 
   async findByTag(tag: string): Promise<Post[]> {
-    return this.postModel.find({ tags: tag })
+    return this.postModel
+      .find({ tags: tag })
       .sort({ createdAt: -1 })
       .populate('createdBy', '-password')
       .populate({
@@ -116,7 +140,8 @@ export class PostsService {
   }
 
   async findByUser(userId: string): Promise<Post[]> {
-    return this.postModel.find({ createdBy: userId })
+    return this.postModel
+      .find({ createdBy: userId })
       .sort({ createdAt: -1 })
       .populate('createdBy', '-password')
       .populate({
@@ -126,14 +151,19 @@ export class PostsService {
       .exec();
   }
 
-  async findByContentType(type: 'code' | 'video' | 'image', page = 1, limit = 10): Promise<Post[]> {
+  async findByContentType(
+    type: 'code' | 'video' | 'image',
+    page = 1,
+    limit = 10,
+  ): Promise<Post[]> {
     const query: any = {};
     query[type] = {
       $exists: true,
       $ne: null,
-      $regex: new RegExp('\\S') // at least one non-whitespace character
+      $regex: new RegExp('\\S'), // at least one non-whitespace character
     };
-    return this.postModel.find(query)
+    return this.postModel
+      .find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -145,19 +175,30 @@ export class PostsService {
       .exec();
   }
 
-  async addOrUpdateReaction(postId: string, userId: string, username: string, reaction: string): Promise<Post> {
+  async addOrUpdateReaction(
+    postId: string,
+    userId: string,
+    username: string,
+    reaction: string,
+  ): Promise<Post> {
     const post = await this.postModel.findById(postId);
     if (!post) throw new NotFoundException('Post not found');
 
     // Check if user already has the same reaction
-    const existingReaction = post.userReactions.find(ur => ur.userId.toString() === userId);
-    
+    const existingReaction = post.userReactions.find(
+      (ur) => ur.userId.toString() === userId,
+    );
+
     if (existingReaction && existingReaction.reaction === reaction) {
       // Remove the reaction if it's the same
-      post.userReactions = post.userReactions.filter(ur => ur.userId.toString() !== userId);
+      post.userReactions = post.userReactions.filter(
+        (ur) => ur.userId.toString() !== userId,
+      );
     } else {
       // Remove any existing reaction by this user and add the new one
-      post.userReactions = post.userReactions.filter(ur => ur.userId.toString() !== userId);
+      post.userReactions = post.userReactions.filter(
+        (ur) => ur.userId.toString() !== userId,
+      );
       post.userReactions.push({
         userId: new Types.ObjectId(userId),
         username,
@@ -169,19 +210,21 @@ export class PostsService {
     // Update the reactions count
     const reactionTypes = ['like', 'love', 'wow', 'funny', 'dislike', 'happy'];
     post.reactions = reactionTypes.reduce((acc, type) => {
-      acc[type] = post.userReactions.filter(ur => ur.reaction === type).length;
+      acc[type] = post.userReactions.filter(
+        (ur) => ur.reaction === type,
+      ).length;
       return acc;
     }, {} as any);
 
     await post.save();
-    
+
     // Populate userReactions.userId and createdBy before returning
     await post.populate('createdBy', '-password');
     await post.populate({
       path: 'userReactions.userId',
       select: '_id firstName lastName avatar role',
     });
-    
+
     return post;
   }
-} 
+}
