@@ -262,22 +262,30 @@ export class ChatService {
 
   async createPrivateRoom(senderId: string, receiverId: string) {
     console.log('[SERVICE] Creating private room between:', { senderId, receiverId });
-    
     try {
-      // Check if a private room already exists between these two users
-      const existingRoom = await this.chatRoomModel.findOne({
+      // Find a private room where members contains only these two users (in any order), or just one of them
+      let existingRoom = await this.chatRoomModel.findOne({
         type: 'private',
-        members: {
-          $all: [
-            new Types.ObjectId(senderId),
-            new Types.ObjectId(receiverId)
-          ],
-          $size: 2
-        }
-      }).exec();
+        $or: [
+          { members: [new Types.ObjectId(senderId), new Types.ObjectId(receiverId)] },
+          { members: [new Types.ObjectId(receiverId), new Types.ObjectId(senderId)] },
+          { members: [new Types.ObjectId(senderId)] },
+          { members: [new Types.ObjectId(receiverId)] }
+        ]
+      });
 
+      console.log('[SERVICE] senderId:', senderId, 'receiverId:', receiverId);
       if (existingRoom) {
-        console.log('[SERVICE] Private room already exists:', existingRoom._id);
+        console.log('[SERVICE] Found existing private room:', existingRoom._id);
+        const memberIds = existingRoom.members.map((m: any) => m.toString());
+        if (!memberIds.includes(senderId.toString())) {
+          existingRoom.members.push(new Types.ObjectId(senderId));
+        }
+        if (!memberIds.includes(receiverId.toString())) {
+          existingRoom.members.push(new Types.ObjectId(receiverId));
+        }
+        await existingRoom.save();
+        console.log('[SERVICE] Updated members:', existingRoom.members);
         return existingRoom;
       }
 
@@ -297,12 +305,35 @@ export class ChatService {
 
       await newRoom.save();
       console.log('[SERVICE] New private room created:', newRoom._id);
-      
       return newRoom;
     } catch (error) {
       console.error('[SERVICE] Error creating private room:', error);
       throw error;
     }
+  }
+
+  /**
+   * Remove a user from a chat room. If the last member leaves, delete the room.
+   */
+  async removeUserFromRoom(roomId: string, userId: string) {
+    const room = await this.chatRoomModel.findById(roomId);
+    if (!room) throw new Error('Room not found');
+    // Remove user from members
+    room.members = room.members.filter((m: any) => m.toString() !== userId);
+    // Also remove from admins if present
+    if (room.admins) {
+      room.admins = room.admins.filter((a: any) => a.toString() !== userId);
+    }
+    await room.save();
+    console.log(`[SERVICE] User ${userId} removed from room ${roomId}. Remaining members:`, room.members);
+    // If no members left, delete the room and its messages
+    if (room.members.length === 0) {
+      await this.messageModel.deleteMany({ chatRoom: room._id });
+      await this.chatRoomModel.findByIdAndDelete(room._id);
+      console.log(`[SERVICE] Room ${roomId} deleted from DB because all users left.`);
+      return { deleted: true };
+    }
+    return { deleted: false };
   }
 
   // Chat business logic will be implemented here
