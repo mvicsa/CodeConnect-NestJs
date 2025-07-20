@@ -22,6 +22,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
+  // Track online users: userId -> Set of socketIds
+  private onlineUsers: Map<string, Set<string>> = new Map();
+
   constructor(
     private readonly chatService: ChatService, 
     private readonly jwtService: JwtService,
@@ -70,6 +73,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
+      // Track online user
+      if (!this.onlineUsers.has(userId)) this.onlineUsers.set(userId, new Set());
+      this.onlineUsers.get(userId)!.add(client.id);
+      // Broadcast online status
+      console.log(`[GATEWAY] user:status emit:`, { userId, status: 'online' });
+      this.server.emit('user:status', { userId, status: 'online' });
+      // Emit all currently online users to the new client
+      const onlineUserIds = Array.from(this.onlineUsers.keys());
+      client.emit('user:status:all', { online: onlineUserIds });
+
       // Fetch all chat rooms for user
       const rooms = await this.chatService.getUserChatRooms(userId);
       
@@ -90,6 +103,19 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     console.log('Socket.IO: handleDisconnect called for client', client.id);
+    // Find userId by socketId
+    for (const [userId, sockets] of this.onlineUsers.entries()) {
+      if (sockets.has(client.id)) {
+        sockets.delete(client.id);
+        if (sockets.size === 0) {
+          this.onlineUsers.delete(userId);
+          // Broadcast offline status
+          console.log(`[GATEWAY] user:status emit:`, { userId, status: 'offline' });
+          this.server.emit('user:status', { userId, status: 'offline' });
+        }
+        break;
+      }
+    }
     // Handle disconnect
   }
 
@@ -143,8 +169,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
+    if (!data.roomId) {
+      console.warn('[GATEWAY] chat:typing received with missing roomId:', data);
+      return;
+    }
     // Broadcast typing status to the room except sender
-    client.to(data.roomId).emit('chat:typing', { userId, isTyping: data.isTyping });
+    client.to(data.roomId).emit('chat:typing', { roomId: data.roomId, userId, isTyping: data.isTyping });
   }
 
   @SubscribeMessage('chat:delete_message')
@@ -261,10 +291,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     
     try {
       const room = await this.chatService.createPrivateRoom(senderId, data.receiverId);
-      
-      // Join both users to the room
+      // Join sender to the room
       client.join((room as any)._id.toString());
-      
+
+      // Notify the receiver (if online) to join the room as well
+      this.server.to(data.receiverId).emit('chat:join_room', { roomId: (room as any)._id.toString() });
+
       // Send response using acknowledgment callback
       const response = { 
         roomId: (room as any)._id.toString(),

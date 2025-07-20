@@ -1,4 +1,4 @@
-import { Controller, Post, UploadedFile, UseGuards, UseInterceptors, Req, Get, Query, Param, Body, Res, HttpStatus } from '@nestjs/common';
+import { Controller, Post, UploadedFile, UseGuards, UseInterceptors, Req, Get, Query, Param, Body, Res, HttpStatus, Delete } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileUploadService } from './file-upload.service';
@@ -50,5 +50,11 @@ export class ChatController {
     res.setHeader('Content-Disposition', `inline; filename="${file.originalname}"`);
     const buffer = Buffer.from(file.data, 'base64');
     return res.send(buffer);
+  }
+
+  @Delete('rooms/:roomId')
+  async removeUserFromRoom(@Req() req, @Param('roomId') roomId: string) {
+    const userId = req.user._id || req.user.id || req.user.sub;
+    return await this.chatService.removeUserFromRoom(roomId, userId);
   }
 } 
