@@ -29,6 +29,13 @@ export class PostsController {
     return posts;
   }
 
+  @Get('tags')
+  @ApiOperation({ summary: 'Get trending tags (top 10 most used)' })
+  @ApiResponse({ status: 200, description: 'List of trending tags with usage count', type: [Object] })
+  async getTrendingTags() {
+    return this.postsService.getTrendingTags();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a post by id' })
   @ApiParam({ name: 'id', type: String })
