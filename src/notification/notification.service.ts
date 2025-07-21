@@ -1,5 +1,11 @@
 // notification.service.ts
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { NotificationDocument } from './entities/notification.schema';
@@ -17,9 +23,9 @@ export class NotificationService {
 
   async create(dto: CreateNotificationDto) {
     const created = new this.notificationModel(dto);
-    this.gateway.sendNotificationToUser(dto?.toUserId, created);
-    console.log('we created a notification', created);
-    return created.save();
+    const saved = await created.save();
+    this.gateway.sendNotificationToUser(dto?.toUserId, saved);
+    return saved;
   }
 
   findByUser(toUserId: string) {
@@ -52,5 +58,15 @@ export class NotificationService {
     return this.notificationModel
       .deleteMany({ createdAt: { $lt: threshold } })
       .exec();
+  }
+
+  async deleteOne(id: string, userId: string) {
+    const notification = await this.notificationModel.findById(id);
+    if (!notification) throw new NotFoundException('Notification not found');
+    if (notification.toUserId.toString() !== userId)
+      throw new ForbiddenException(
+        'You can only delete your own notifications',
+      );
+    return this.notificationModel.deleteOne({ _id: id, toUserId: userId });
   }
 }

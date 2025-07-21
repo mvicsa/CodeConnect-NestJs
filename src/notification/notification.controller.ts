@@ -2,11 +2,13 @@
 import {
   BadRequestException,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
   Patch,
   Query,
+  Request,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
@@ -86,6 +88,15 @@ export class NotificationController {
   async markAllAsRead(@Param('toUserId') toUserId: string) {
     console.log('here in the part of mark all as read', toUserId);
     return this.notificationModel.markAllAsRead(toUserId);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete notification' })
+  async delete(
+    @Param('id') id: string,
+    @Request() req: Request & { user: any },
+  ) {
+    return this.notificationService.deleteOne(id, req.user.sub);
   }
 }
 

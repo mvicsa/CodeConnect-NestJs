@@ -254,28 +254,28 @@ export class NotificationListener {
   }
 
   //---------------> 6
-  @EventPattern('message.received')
-  async handleMessageReceived(
-    @Payload() data: CreateNotificationDto,
-    @Ctx() context: RmqContext,
-  ) {
-    console.log('In handleMessageReceived', data, context);
-    const channel = context.getChannelRef();
-    const originalMsg = context.getMessage();
-    try {
-      await this.notificationService.create({
-        toUserId: data.toUserId,
-        content: `You have received a message from ${data.fromUserId}`,
-        type: NotificationType.MESSAGE_RECEIVED,
-        data: data.data,
-        fromUserId: data.fromUserId,
-      });
-      channel.ack(originalMsg);
-    } catch (error) {
-      console.log('Error in the part of handleMessage received ok ', error);
-      channel.nack(originalMsg);
-    }
-  }
+  // @EventPattern('message.received')
+  // async handleMessageReceived(
+  //   @Payload() data: CreateNotificationDto,
+  //   @Ctx() context: RmqContext,
+  // ) {
+  //   console.log('In handleMessageReceived', data, context);
+  //   const channel = context.getChannelRef();
+  //   const originalMsg = context.getMessage();
+  //   try {
+  //     await this.notificationService.create({
+  //       toUserId: data.toUserId,
+  //       content: `You have received a message from ${data.fromUserId}`,
+  //       type: NotificationType.MESSAGE_RECEIVED,
+  //       data: data.data,
+  //       fromUserId: data.fromUserId,
+  //     });
+  //     channel.ack(originalMsg);
+  //   } catch (error) {
+  //     console.log('Error in the part of handleMessage received ok ', error);
+  //     channel.nack(originalMsg);
+  //   }
+  // }
 
   // @EventPattern('#')
   // async handleUnknownEvent(@Payload() data: any, @Ctx() context: RmqContext) {
