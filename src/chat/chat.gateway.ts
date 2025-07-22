@@ -26,18 +26,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private onlineUsers: Map<string, Set<string>> = new Map();
 
   constructor(
-    private readonly chatService: ChatService,
+    private readonly chatService: ChatService, 
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
+    private readonly configService: ConfigService
   ) {}
 
   async handleConnection(client: Socket) {
     try {
       console.log('Socket.IO: handleConnection called');
       // Extract JWT token from handshake
-      const token =
-        client.handshake.auth?.token ||
-        client.handshake.headers['authorization']?.split(' ')[1];
+      const token = client.handshake.auth?.token || client.handshake.headers['authorization']?.split(' ')[1];
       console.log('Socket.IO: Received token:', token);
 
       if (!token) {
@@ -87,9 +85,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // Fetch all chat rooms for user
       const rooms = await this.chatService.getUserChatRooms(userId);
-
+      
       // Join user to all their chat rooms
-      rooms.forEach((room) => {
+      rooms.forEach(room => {
         client.join((room as any)._id.toString());
       });
 
@@ -122,10 +120,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('chat:send_message')
-  async handleSendMessage(
-    @MessageBody() data: CreateMessageDto,
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleSendMessage(@MessageBody() data: CreateMessageDto, @ConnectedSocket() client: Socket) {
     const userId = (client as any).userId;
     if (!userId) {
       client.emit('chat:error', { message: 'Unauthorized' });
@@ -140,10 +135,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('chat:seen')
-  async handleSeen(
-    @MessageBody() data: { roomId: string; messageIds: string[] },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleSeen(@MessageBody() data: { roomId: string; messageIds: string[] }, @ConnectedSocket() client: Socket) {
     const userId = (client as any).userId;
     if (!userId) {
       console.log('[GATEWAY] Unauthorized seen attempt');
@@ -151,24 +143,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    console.log('[GATEWAY] Processing seen message request:', {
-      ...data,
-      userId,
-    });
+    console.log('[GATEWAY] Processing seen message request:', { ...data, userId });
     try {
       await this.chatService.markMessagesAsSeen(userId, data.messageIds);
-      console.log(
-        '[GATEWAY] Messages marked as seen, broadcasting to room:',
-        data.roomId,
-      );
-
+      console.log('[GATEWAY] Messages marked as seen, broadcasting to room:', data.roomId);
+      
       // Broadcast to all clients in the room, including sender
       this.server.to(data.roomId).emit('chat:seen', {
         messageIds: data.messageIds,
         roomId: data.roomId,
-        userId,
+        userId
       });
-
+      
       console.log('[GATEWAY] Seen event broadcasted successfully');
     } catch (error) {
       console.error('[GATEWAY] Error marking messages as seen:', error);
@@ -177,10 +163,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('chat:typing')
-  async handleTyping(
-    @MessageBody() data: { roomId: string; isTyping: boolean },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleTyping(@MessageBody() data: { roomId: string; isTyping: boolean }, @ConnectedSocket() client: Socket) {
     const userId = (client as any).userId;
     if (!userId) {
       client.emit('chat:error', { message: 'Unauthorized' });
@@ -191,43 +174,31 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
     // Broadcast typing status to the room except sender
-    client
-      .to(data.roomId)
-      .emit('chat:typing', { userId, isTyping: data.isTyping });
     client.to(data.roomId).emit('chat:typing', { roomId: data.roomId, userId, isTyping: data.isTyping });
   }
 
   @SubscribeMessage('chat:delete_message')
-  async handleDeleteMessage(
-    @MessageBody() data: { roomId: string; messageId: string; forAll: boolean },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleDeleteMessage(@MessageBody() data: { roomId: string; messageId: string; forAll: boolean }, @ConnectedSocket() client: Socket) {
     const userId = (client as any).userId;
     if (!userId) {
       console.log('[GATEWAY] Unauthorized delete attempt');
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
-
-    console.log('[GATEWAY] Processing delete message request:', {
-      ...data,
-      userId,
-    });
+    
+    console.log('[GATEWAY] Processing delete message request:', { ...data, userId });
     try {
       await this.chatService.deleteMessage(userId, data.messageId, data.forAll);
-      console.log(
-        '[GATEWAY] Message deleted successfully, broadcasting to room:',
-        data.roomId,
-      );
-
+      console.log('[GATEWAY] Message deleted successfully, broadcasting to room:', data.roomId);
+      
       // Broadcast to all clients in the room, including sender
       this.server.to(data.roomId).emit('chat:delete_message', {
         messageId: data.messageId,
         roomId: data.roomId,
         forAll: data.forAll,
-        userId,
+        userId
       });
-
+      
       console.log('[GATEWAY] Delete event broadcasted successfully');
     } catch (error) {
       console.error('[GATEWAY] Error deleting message:', error);
@@ -236,44 +207,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('chat:react_message')
-  async handleReactMessage(
-    @MessageBody() data: { roomId: string; messageId: string; emoji: string },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleReactMessage(@MessageBody() data: { roomId: string; messageId: string; emoji: string }, @ConnectedSocket() client: Socket) {
     const userId = (client as any).userId;
     if (!userId) {
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
-    const updatedMessage = await this.chatService.reactToMessage(
-      userId,
-      data.messageId,
-      data.emoji,
-    );
+    const updatedMessage = await this.chatService.reactToMessage(userId, data.messageId, data.emoji);
     // Broadcast updated message to room
-    this.server.to(data.roomId).emit('chat:react_message', {
-      message: updatedMessage,
-      userId,
-      emoji: data.emoji,
-    });
+    this.server.to(data.roomId).emit('chat:react_message', { message: updatedMessage, userId, emoji: data.emoji });
   }
 
   @SubscribeMessage('group:create')
-  async handleCreateGroup(
-    @MessageBody() data: { title: string; avatar: string; members: string[] },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleCreateGroup(@MessageBody() data: { title: string; avatar: string; members: string[] }, @ConnectedSocket() client: Socket) {
     const creatorId = (client as any).userId;
     if (!creatorId) {
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
-    const group = await this.chatService.createGroup(
-      creatorId,
-      data.title,
-      data.avatar,
-      data.members,
-    );
+    const group = await this.chatService.createGroup(creatorId, data.title, data.avatar, data.members);
     // Join creator to the new group room
     client.join((group as any)._id.toString());
     // Notify all group members (including creator)
@@ -281,106 +233,62 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('group:update_info')
-  async handleUpdateGroupInfo(
-    @MessageBody() data: { roomId: string; title?: string; avatar?: string },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleUpdateGroupInfo(@MessageBody() data: { roomId: string; title?: string; avatar?: string }, @ConnectedSocket() client: Socket) {
     const userId = (client as any).userId;
     if (!userId) {
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
-    const group = await this.chatService.updateGroupInfo(
-      data.roomId,
-      data.title,
-      data.avatar,
-    );
+    const group = await this.chatService.updateGroupInfo(data.roomId, data.title, data.avatar);
     this.server.to(data.roomId).emit('group:updated', group);
   }
 
   @SubscribeMessage('group:add_member')
-  async handleAddGroupMember(
-    @MessageBody() data: { roomId: string; userId: string },
-    @ConnectedSocket() client: Socket,
-  ) {
-    const group = await this.chatService.addGroupMember(
-      data.roomId,
-      data.userId,
-    );
+  async handleAddGroupMember(@MessageBody() data: { roomId: string; userId: string }, @ConnectedSocket() client: Socket) {
+    const group = await this.chatService.addGroupMember(data.roomId, data.userId);
     // Notify all group members
-    this.server
-      .to(data.roomId)
-      .emit('group:member_added', { roomId: data.roomId, userId: data.userId });
+    this.server.to(data.roomId).emit('group:member_added', { roomId: data.roomId, userId: data.userId });
   }
 
   @SubscribeMessage('group:remove_member')
-  async handleRemoveGroupMember(
-    @MessageBody() data: { roomId: string; userId: string },
-    @ConnectedSocket() client: Socket,
-  ) {
-    const group = await this.chatService.removeGroupMember(
-      data.roomId,
-      data.userId,
-    );
+  async handleRemoveGroupMember(@MessageBody() data: { roomId: string; userId: string }, @ConnectedSocket() client: Socket) {
+    const group = await this.chatService.removeGroupMember(data.roomId, data.userId);
     // Notify all group members
-    this.server.to(data.roomId).emit('group:member_removed', {
-      roomId: data.roomId,
-      userId: data.userId,
-    });
+    this.server.to(data.roomId).emit('group:member_removed', { roomId: data.roomId, userId: data.userId });
   }
 
   @SubscribeMessage('chat:pin_message')
-  async handlePinMessage(
-    @MessageBody() data: { roomId: string; messageId: string },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handlePinMessage(@MessageBody() data: { roomId: string; messageId: string }, @ConnectedSocket() client: Socket) {
     const userId = (client as any).userId;
     if (!userId) {
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
     await this.chatService.pinMessage(data.roomId, data.messageId);
-    this.server.to(data.roomId).emit('chat:pin_message', {
-      roomId: data.roomId,
-      messageId: data.messageId,
-      userId,
-    });
+    this.server.to(data.roomId).emit('chat:pin_message', { roomId: data.roomId, messageId: data.messageId, userId });
   }
 
   @SubscribeMessage('chat:unpin_message')
-  async handleUnpinMessage(
-    @MessageBody() data: { roomId: string; messageId: string },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleUnpinMessage(@MessageBody() data: { roomId: string; messageId: string }, @ConnectedSocket() client: Socket) {
     const userId = (client as any).userId;
     if (!userId) {
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
     await this.chatService.unpinMessage(data.roomId, data.messageId);
-    this.server.to(data.roomId).emit('chat:unpin_message', {
-      roomId: data.roomId,
-      messageId: data.messageId,
-      userId,
-    });
+    this.server.to(data.roomId).emit('chat:unpin_message', { roomId: data.roomId, messageId: data.messageId, userId });
   }
 
   @SubscribeMessage('createPrivateRoom')
-  async handleCreatePrivateRoom(
-    @MessageBody() data: { receiverId: string },
-    @ConnectedSocket() client: Socket,
-  ) {
+  async handleCreatePrivateRoom(@MessageBody() data: { receiverId: string }, @ConnectedSocket() client: Socket) {
     const senderId = (client as any).userId;
     if (!senderId) {
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
 
-    console.log('[GATEWAY] Creating private room:', {
-      senderId,
-      receiverId: data.receiverId,
-    });
-
+    console.log('[GATEWAY] Creating private room:', { senderId, receiverId: data.receiverId });
+    
     try {
       const room = await this.chatService.createPrivateRoom(senderId, data.receiverId);
       
@@ -391,18 +299,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(data.receiverId).emit('chat:join_room', { roomId: (room as any)._id.toString() });
 
       // Send response using acknowledgment callback
-      const response = {
+      const response = { 
         roomId: (room as any)._id.toString(),
-        room: room,
+        room: room
       };
-
-      console.log(
-        '[GATEWAY] Private room created successfully:',
-        (room as any)._id,
-        'Response:',
-        response,
-      );
-
+      
+      console.log('[GATEWAY] Private room created successfully:', (room as any)._id, 'Response:', response);
+      
       // Return the response to the client
       return response;
     } catch (error) {
@@ -414,7 +317,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('chat:get_messages')
   async handleGetMessages(
     @MessageBody() data: { roomId: string; limit?: number; before?: string },
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: Socket
   ) {
     const userId = (client as any).userId;
     if (!userId) {
@@ -428,7 +331,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const messages = await this.chatService.getPaginatedMessages(
         data.roomId,
         data.limit || 50,
-        data.before,
+        data.before
       );
       console.log('[GATEWAY] Fetched messages count:', messages.length);
 
@@ -436,7 +339,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.emit('chat:messages', {
         roomId: data.roomId,
         messages,
-        hasMore: messages.length === (data.limit || 50),
+        hasMore: messages.length === (data.limit || 50)
       });
     } catch (error) {
       console.error('[GATEWAY] Error fetching messages:', error);
