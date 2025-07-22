@@ -298,22 +298,6 @@ export class ChatService {
       senderId,
       receiverId,
     });
-
-    try {
-      // Check if a private room already exists between these two users
-      const existingRoom = await this.chatRoomModel
-        .findOne({
-          type: 'private',
-          members: {
-            $all: [
-              new Types.ObjectId(senderId),
-              new Types.ObjectId(receiverId),
-            ],
-            $size: 2,
-          },
-        })
-        .exec();
-    console.log('[SERVICE] Creating private room between:', { senderId, receiverId });
     try {
       // Find a private room where members contains only these two users (in any order), or just one of them
       let existingRoom = await this.chatRoomModel.findOne({
@@ -361,7 +345,6 @@ export class ChatService {
       throw error;
     }
   }
-
   /**
    * Remove a user from a chat room. If the last member leaves, delete the room.
    */
