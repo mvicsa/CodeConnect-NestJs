@@ -336,5 +336,4 @@ export class ChatService {
   }
 
   // Chat business logic will be implemented here
-}
-
+} 

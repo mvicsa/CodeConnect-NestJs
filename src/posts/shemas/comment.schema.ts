@@ -1,28 +1,40 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
+import { ApiProperty } from '@nestjs/swagger';
 
 export type CommentDocument = Comment & Document;
 
 @Schema({ timestamps: true })
 export class Comment {
-  @Prop({ required: true })
+  @ApiProperty()
+  @Prop({ required: false })
   text: string;
 
+  @ApiProperty({ required: false })
   @Prop()
   code?: string;
 
+  @ApiProperty({ required: false })
   @Prop()
   codeLang?: string;
 
+  @ApiProperty({ type: String })
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
   createdBy: MongooseSchema.Types.ObjectId;
 
+  @ApiProperty({ type: String })
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Post', required: true })
   postId: MongooseSchema.Types.ObjectId;
 
+  @ApiProperty({ type: String, required: false, nullable: true })
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Comment', default: null })
   parentCommentId?: MongooseSchema.Types.ObjectId | null;
 
+  @ApiProperty({
+    type: 'object',
+    example: { like: 0, love: 0, wow: 0, funny: 0, dislike: 0, happy: 0 },
+    additionalProperties: { type: 'number' },
+  })
   @Prop({
     type: Object,
     default: {
@@ -43,6 +55,18 @@ export class Comment {
     happy: number;
   };
 
+  @ApiProperty({
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string' },
+        username: { type: 'string' },
+        reaction: { type: 'string' },
+        createdAt: { type: 'string', format: 'date-time' },
+      },
+    },
+  })
   @Prop({
     type: [
       {
@@ -61,9 +85,11 @@ export class Comment {
     createdAt: Date;
   }>;
 
+  @ApiProperty({ required: false, type: String })
   @Prop()
   createdAt?: Date;
 
+  @ApiProperty({ required: false, type: String })
   @Prop()
   updatedAt?: Date;
 }

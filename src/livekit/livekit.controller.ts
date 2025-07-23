@@ -23,6 +23,10 @@ import {
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiBadRequestResponse,
+  ApiUnauthorizedResponse,
+  ApiNotFoundResponse,
+  ApiBody,
 } from '@nestjs/swagger';
 import { LivekitService } from './livekit.service';
 import { CreateRoomDto } from './dto/create-room.dto';
@@ -46,17 +50,24 @@ export class LivekitController {
 
   @ApiBearerAuth()
   @ApiOperation({
-    summary:
-      'Get LiveKit access token for a room using secret ID (JWT required)',
+    summary: 'Get LiveKit access token for a room using secret ID (JWT required)',
+    description: '⚠️ This module is still under development and may change in future releases.'
   })
   @ApiQuery({ name: 'secretId', required: true, description: 'Room secret ID' })
   @ApiResponse({
     status: 200,
     description: 'LiveKit access token',
-    schema: { example: { token: '...' } },
+    type: Object,
+    examples: {
+      default: {
+        summary: 'Example response',
+        value: { token: '...' },
+      },
+    },
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, description: 'Room not found or inactive' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiNotFoundResponse({ description: 'Room not found or inactive' })
+  @ApiBadRequestResponse({ description: 'Missing or invalid secretId.' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   @UseGuards(JwtAuthGuard)
   @Get('token')
@@ -64,6 +75,9 @@ export class LivekitController {
     @Req() req,
     @Query('secretId') secretId: string,
   ): Promise<{ token: string }> {
+    if (!secretId || typeof secretId !== 'string') {
+      throw new Error('Missing or invalid secretId.');
+    }
     try {
       // req.user comes from JwtStrategy: { sub, email, role }
       const userId = req.user?.sub;
@@ -162,8 +176,9 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create a new room' })
-  @ApiResponse({ status: 201, description: 'Room created successfully' })
+  @ApiOperation({ summary: 'Create a new room', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiBody({ type: CreateRoomDto })
+  @ApiResponse({ status: 201, description: 'Room created successfully', type: LivekitRoom })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(JwtAuthGuard)
   @Post('rooms')
@@ -186,8 +201,8 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all rooms' })
-  @ApiResponse({ status: 200, description: 'List of all rooms' })
+  @ApiOperation({ summary: 'Get all rooms', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'List of all rooms', type: [LivekitRoom] })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(JwtAuthGuard)
   @Get('rooms')
@@ -196,8 +211,8 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get room by ID' })
-  @ApiResponse({ status: 200, description: 'Room details' })
+  @ApiOperation({ summary: 'Get room by ID', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'Room details', type: LivekitRoom })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Room not found' })
   @UseGuards(JwtAuthGuard)
@@ -207,8 +222,9 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update room' })
-  @ApiResponse({ status: 200, description: 'Room updated successfully' })
+  @ApiOperation({ summary: 'Update room', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiBody({ type: UpdateRoomDto })
+  @ApiResponse({ status: 200, description: 'Room updated successfully', type: LivekitRoom })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
     status: 403,
@@ -230,8 +246,8 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete room' })
-  @ApiResponse({ status: 200, description: 'Room deleted successfully' })
+  @ApiOperation({ summary: 'Delete room', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'Room deleted successfully', type: Object })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
     status: 403,
@@ -250,8 +266,8 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get rooms created by current user' })
-  @ApiResponse({ status: 200, description: 'List of user rooms' })
+  @ApiOperation({ summary: 'Get rooms created by current user', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'List of user rooms', type: [LivekitRoom] })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(JwtAuthGuard)
   @Get('rooms/user/my-rooms')
@@ -264,8 +280,8 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get room secret ID (only for room creator)' })
-  @ApiResponse({ status: 200, description: 'Room secret ID' })
+  @ApiOperation({ summary: 'Get room secret ID (only for room creator)', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'Room secret ID', type: Object })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
     status: 403,
@@ -283,8 +299,8 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Join room by secret ID' })
-  @ApiResponse({ status: 200, description: 'Room details' })
+  @ApiOperation({ summary: 'Join room by secret ID', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'Room details', type: LivekitRoom })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Room not found or inactive' })
   @UseGuards(JwtAuthGuard)

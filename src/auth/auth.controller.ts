@@ -21,6 +21,8 @@ import {
   ApiOkResponse,
   ApiUnauthorizedResponse,
   ApiBearerAuth,
+  ApiResponse,
+  ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
 import { from } from 'rxjs';
@@ -38,23 +40,29 @@ export class AuthController {
 
   @Post('register')
   @ApiCreatedResponse({ description: 'User successfully registered' })
-  @ApiBadRequestResponse({
-    description: 'Validation failed or email/username exists',
-  })
+  @ApiBadRequestResponse({ description: 'Validation failed or email/username exists' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+    try {
+      return await this.authService.register(registerDto);
+    } catch (error) {
+      if (error.status === 400) {
+        throw error;
+      }
+      throw new Error('Internal server error');
+    }
   }
 
   @Post('login')
   @ApiOkResponse({ description: 'User logged in successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   async login(@Body() loginDto: LoginDto) {
     this.logger.log(`LoginDto ${JSON.stringify(loginDto)}`);
-
     try {
       await this.client.connect();
       const response = await this.authService.login(loginDto);
-      console.log('response', response);
       this.client.emit('user.login', {
         toUserId: response.user._id,
         content: response.message,
@@ -65,7 +73,10 @@ export class AuthController {
       this.logger.log(`✅ Emitted user.login event for: ${loginDto.email}`);
       return response;
     } catch (error) {
-      this.logger.error(`❌ Failed to emit user.login event: ${error}`);
+      if (error.status === 400 || error.status === 401) {
+        throw error;
+      }
+      throw new Error('Internal server error');
     }
   }
 
@@ -73,14 +84,31 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiOkResponse({ description: 'Returns full user profile' })
   @ApiUnauthorizedResponse({ description: 'Unauthorized - Invalid token' })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   async getProfile(@Req() req: Request & { user: any }) {
-    const userId: string = req.user?.sub;
-    const user = await this.authService.getProfileById(userId);
-
-    return {
-      message: 'Profile fetched successfully',
-      user,
-    };
+    try {
+      const userId: string = req.user?.sub;
+      if (!userId) {
+        throw new Error('User ID not found in token');
+      }
+      const user = await this.authService.getProfileById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+      return {
+        message: 'Profile fetched successfully',
+        user,
+      };
+    } catch (error) {
+      if (error.message === 'User not found') {
+        throw { status: 404, message: 'User not found' };
+      }
+      if (error.message === 'User ID not found in token') {
+        throw { status: 401, message: 'Unauthorized' };
+      }
+      throw new Error('Internal server error');
+    }
   }
 
   @Get('github')

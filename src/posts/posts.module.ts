@@ -12,6 +12,7 @@ import {
   CodeSuggestionSchema,
 } from './shemas/code-suggestion.schema';
 import { RabbitMQModule } from 'src/rabbitmq/rabbitmq.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { RabbitMQModule } from 'src/rabbitmq/rabbitmq.module';
       { name: CodeSuggestion.name, schema: CodeSuggestionSchema },
     ]),
     AiAgentModule,
+    UsersModule,
   ],
   providers: [PostsService, CommentsService],
   controllers: [PostsController, CommentsController],

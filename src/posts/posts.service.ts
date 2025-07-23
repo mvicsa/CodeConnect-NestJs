@@ -180,7 +180,7 @@ export class PostsService {
     userId: string,
     username: string,
     reaction: string,
-  ): Promise<Post> {
+  ): Promise<{ post: Post; action: 'add' | 'remove' }> {
     const post = await this.postModel.findById(postId);
     if (!post) throw new NotFoundException('Post not found');
 
@@ -189,11 +189,13 @@ export class PostsService {
       (ur) => ur.userId.toString() === userId,
     );
 
+    let action: 'add' | 'remove';
     if (existingReaction && existingReaction.reaction === reaction) {
       // Remove the reaction if it's the same
       post.userReactions = post.userReactions.filter(
         (ur) => ur.userId.toString() !== userId,
       );
+      action = 'remove';
     } else {
       // Remove any existing reaction by this user and add the new one
       post.userReactions = post.userReactions.filter(
@@ -205,6 +207,7 @@ export class PostsService {
         reaction,
         createdAt: new Date(),
       });
+      action = 'add';
     }
 
     // Update the reactions count
@@ -225,7 +228,7 @@ export class PostsService {
       select: '_id firstName lastName avatar role',
     });
 
-    return post;
+    return { post, action };
   }
 
   // Remove getAllTags and add trending tags

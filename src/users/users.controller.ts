@@ -20,6 +20,8 @@ import {
   ApiBearerAuth,
   ApiOkResponse,
   ApiNotFoundResponse,
+  ApiBadRequestResponse,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
@@ -40,11 +42,15 @@ export class UsersController {
     description: 'User ID to follow',
   })
   @ApiResponse({ status: 201, description: 'Followed user successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiBadRequestResponse({ description: 'Invalid user ID' })
   async followUser(
     @Param('targetId') targetId: string,
     @Req() req: Request & { user: any },
   ) {
+    if (!targetId || typeof targetId !== 'string') {
+      throw new Error('Invalid user ID');
+    }
     const userId = req.user?.sub;
     return this.usersService.followUser(userId, targetId);
   }
@@ -59,11 +65,15 @@ export class UsersController {
     description: 'User ID to unfollow',
   })
   @ApiResponse({ status: 200, description: 'Unfollowed user successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiBadRequestResponse({ description: 'Invalid user ID' })
   async unfollowUser(
     @Param('targetId') targetId: string,
     @Req() req: Request & { user: any },
   ) {
+    if (!targetId || typeof targetId !== 'string') {
+      throw new Error('Invalid user ID');
+    }
     const userId = req.user?.sub;
     return this.usersService.unfollowUser(userId, targetId);
   }
@@ -92,7 +102,8 @@ export class UsersController {
     description: 'Number of followers to skip',
   })
   @ApiResponse({ status: 200, description: 'List of followers' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiBadRequestResponse({ description: 'Invalid user ID' })
   async getFollowers(
     @Param('id') id: string,
     @Req() req: Request & { user: any },
@@ -100,6 +111,9 @@ export class UsersController {
     @Query('skip') skip?: string,
   ) {
     const userId = id === 'me' ? req.user?.sub : id;
+    if (!userId || typeof userId !== 'string') {
+      throw new Error('Invalid user ID');
+    }
     return this.usersService.getFollowers(
       userId,
       limit ? Number(limit) : 20,
@@ -131,7 +145,8 @@ export class UsersController {
     description: 'Number of users to skip',
   })
   @ApiResponse({ status: 200, description: 'List of following users' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiBadRequestResponse({ description: 'Invalid user ID' })
   async getFollowing(
     @Param('id') id: string,
     @Req() req: Request & { user: any },
@@ -139,6 +154,9 @@ export class UsersController {
     @Query('skip') skip?: string,
   ) {
     const userId = id === 'me' ? req.user?.sub : id;
+    if (!userId || typeof userId !== 'string') {
+      throw new Error('Invalid user ID');
+    }
     return this.usersService.getFollowing(
       userId,
       limit ? Number(limit) : 20,
@@ -167,7 +185,7 @@ export class UsersController {
     description: 'Number of users to skip',
   })
   @ApiResponse({ status: 200, description: 'List of suggested users' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async suggestUsers(
     @Req() req: Request & { user: any },
     @Query('limit') limit?: string,
@@ -186,19 +204,27 @@ export class UsersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update current user profile' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiBadRequestResponse({ description: 'Invalid update data' })
   async updateMe(
     @Req() req: Request & { user: any },
     @Body() updateUserDto: UpdateUserDto,
   ) {
     const userId = req.user?.sub;
+    if (!userId || typeof userId !== 'string') {
+      throw new Error('Invalid user ID');
+    }
     return this.usersService.updateUser(userId, updateUserDto);
   }
 
   @Get(':username')
   @ApiOkResponse({ description: 'Public user profile returned.' })
   @ApiNotFoundResponse({ description: 'User not found.' })
+  @ApiBadRequestResponse({ description: 'Invalid username.' })
   async getUserProfile(@Param('username') username: string) {
+    if (!username || typeof username !== 'string') {
+      throw new Error('Invalid username.');
+    }
     return this.usersService.findByUsername(username);
   }
 
