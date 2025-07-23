@@ -37,8 +37,15 @@ export class NotificationGateway {
       client.emit('error', 'Invalid toUserId');
       return;
     }
-    client.join(`user:${toUserId}`);
-    console.log(`User ${toUserId} joined room user:${toUserId}`);
+    const room = `user:${toUserId}`;
+    // Prevent joining the same room multiple times
+    if (!client.rooms.has(room)) {
+      client.join(room);
+      console.log(`User ${toUserId} joined room ${room}`);
+    } else {
+      // Optionally log or ignore
+      // console.log(`User ${toUserId} already in room ${room}`);
+    }
     const notifications = await this.notificationService.findByUser(toUserId);
     notifications.forEach((notification) =>
       client.emit('notification', notification),

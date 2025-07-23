@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileUploadService } from './file-upload.service';
 import { ChatService } from './chat.service';
 import { Response } from 'express';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiResponse, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiNotFoundResponse, ApiOperation } from '@nestjs/swagger';
 
 @ApiBearerAuth()
 @ApiTags('chat')
@@ -17,11 +17,17 @@ export class ChatController {
   ) {}
 
   @Post('uploadBase64')
+  @ApiOperation({ summary: 'Upload a file to the chat', description: '⚠️ This module is for testing and will be deleted in future releases.' })
+  @ApiResponse({ status: 201, description: 'File uploaded successfully.' })
+  @ApiBadRequestResponse({ description: 'Invalid file data.' })
   async uploadBase64File(
     @Body('base64') base64: string,
     @Body('mimetype') mimetype: string,
     @Body('originalname') originalname: string,
   ) {
+    if (!base64 || !mimetype || !originalname) {
+      throw new Error('Invalid file data.');
+    }
     const fileId = await this.fileUploadService.uploadBase64File(
       base64,
       mimetype,
@@ -52,6 +58,8 @@ export class ChatController {
   }
 
   @Get('file/:id')
+  @ApiResponse({ status: 200, description: 'File found.' })
+  @ApiNotFoundResponse({ description: 'File not found.' })
   async getFile(@Param('id') id: string, @Res() res: Response) {
     const file = await this.fileUploadService.getFileById(id);
     if (!file) {

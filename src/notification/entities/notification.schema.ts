@@ -80,9 +80,11 @@ export enum NotificationType {
   POST_CREATED = 'POST_CREATED',
   POST_REACTION = 'POST_REACTION',
   COMMENT_ADDED = 'COMMENT_ADDED',
+  COMMENT_REACTION = 'COMMENT_REACTION',
   FOLLOWED_USER = 'FOLLOWED_USER',
   MESSAGE_RECEIVED = 'MESSAGE_RECEIVED',
   LOGIN = 'LOGIN', // New: for login notifications
+  USER_MENTIONED = 'USER_MENTIONED', // New: when a user is mentioned
 }
 // // Add more as needed
 // POST_SHARED = 'POST_SHARED', // New: when a post is shared

@@ -11,7 +11,7 @@ export class AiAgentController {
 
   @Post('code-help')
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get suggestions for fixing code problems' })
+  @ApiOperation({ summary: 'Get suggestions for fixing code problems', description: '⚠️ This module is still under development and may change in future releases.' })
   @ApiResponse({
     status: 200,
     description: 'Returns suggestions on how to fix the code problem',

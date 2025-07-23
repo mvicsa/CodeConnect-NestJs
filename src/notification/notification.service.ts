@@ -5,6 +5,27 @@ import { Model } from 'mongoose';
 import { NotificationDocument } from './entities/notification.schema';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { NotificationGateway } from './notification.gateway';
+import { NotificationType } from './entities/notification.schema';
+
+function extractObjectId(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string') {
+    // Match new ObjectId('...') or _id: '...'
+    const match = val.match(/_id: new ObjectId\('([a-fA-F0-9]{24})'\)/) || val.match(/_id: '([a-fA-F0-9]{24})'/);
+    if (match) return match[1];
+    // If it's just an ObjectId string
+    if (/^[a-fA-F0-9]{24}$/.test(val.trim())) return val.trim();
+    // Try to parse as JSON
+    try {
+      const parsed = JSON.parse(val);
+      if (parsed && typeof parsed === 'object' && parsed._id) return parsed._id.toString();
+    } catch {
+      return val;
+    }
+  }
+  if (typeof val === 'object' && val._id) return val._id.toString();
+  return val.toString();
+}
 
 @Injectable()
 export class NotificationService {
@@ -16,6 +37,130 @@ export class NotificationService {
   ) {}
 
   async create(dto: CreateNotificationDto) {
+    dto.toUserId = extractObjectId(dto.toUserId);
+    dto.fromUserId = extractObjectId(dto.fromUserId);
+    // Deduplicate COMMENT_REACTION notifications
+    if (dto.type === NotificationType.COMMENT_REACTION && dto.data && dto.data._id) {
+      const existing = await this.notificationModel.findOne({
+        toUserId: dto.toUserId,
+        fromUserId: dto.fromUserId,
+        type: NotificationType.COMMENT_REACTION,
+        'data._id': dto.data._id,
+      });
+      if (existing) {
+        existing.set('updatedAt', new Date());
+        existing.data = dto.data; // Optionally update data
+        await existing.save();
+        // Populate and return as in the new notification case
+        const populatedNotification = await this.notificationModel.findById(existing._id)
+          .populate('toUserId', 'username firstName lastName avatar')
+          .populate('fromUserId', 'username firstName lastName avatar')
+          .populate({
+            path: 'data.postId',
+            model: 'Post',
+            select: 'text code codeLang image video tags reactions createdAt updatedAt',
+            populate: {
+              path: 'createdBy',
+              model: 'User',
+              select: 'username firstName lastName avatar'
+            }
+          })
+          .populate({
+            path: 'data.commentId',
+            model: 'Comment',
+            select: 'text code codeLang postId parentCommentId reactions createdAt updatedAt',
+            populate: [
+              {
+                path: 'createdBy',
+                model: 'User',
+                select: 'username firstName lastName avatar'
+              },
+              {
+                path: 'postId',
+                model: 'Post',
+                select: 'text code codeLang image video tags reactions createdAt updatedAt',
+                populate: {
+                  path: 'createdBy',
+                  model: 'User',
+                  select: 'username firstName lastName avatar'
+                }
+              }
+            ]
+          })
+          .lean()
+          .exec();
+        if (populatedNotification) {
+          this.gateway.sendNotificationToUser(dto?.toUserId, populatedNotification);
+          // Emit notification:update for realtime update
+          if (this.gateway.server) {
+            this.gateway.server.to(`user:${dto?.toUserId}`).emit('notification:update', populatedNotification);
+          }
+          return populatedNotification;
+        }
+        return existing;
+      }
+    }
+    // Deduplicate POST_REACTION notifications
+    if (dto.type === NotificationType.POST_REACTION && dto.data && dto.data.postId) {
+      const existing = await this.notificationModel.findOne({
+        toUserId: dto.toUserId,
+        fromUserId: dto.fromUserId,
+        type: NotificationType.POST_REACTION,
+        'data.postId': dto.data.postId,
+      });
+      if (existing) {
+        existing.set('updatedAt', new Date());
+        existing.data = dto.data; // Optionally update data
+        await existing.save();
+        // Populate and return as in the new notification case
+        const populatedNotification = await this.notificationModel.findById(existing._id)
+          .populate('toUserId', 'username firstName lastName avatar')
+          .populate('fromUserId', 'username firstName lastName avatar')
+          .populate({
+            path: 'data.postId',
+            model: 'Post',
+            select: 'text code codeLang image video tags reactions createdAt updatedAt',
+            populate: {
+              path: 'createdBy',
+              model: 'User',
+              select: 'username firstName lastName avatar'
+            }
+          })
+          .populate({
+            path: 'data.commentId',
+            model: 'Comment',
+            select: 'text code codeLang postId parentCommentId reactions createdAt updatedAt',
+            populate: [
+              {
+                path: 'createdBy',
+                model: 'User',
+                select: 'username firstName lastName avatar'
+              },
+              {
+                path: 'postId',
+                model: 'Post',
+                select: 'text code codeLang image video tags reactions createdAt updatedAt',
+                populate: {
+                  path: 'createdBy',
+                  model: 'User',
+                  select: 'username firstName lastName avatar'
+                }
+              }
+            ]
+          })
+          .lean()
+          .exec();
+        if (populatedNotification) {
+          this.gateway.sendNotificationToUser(dto?.toUserId, populatedNotification);
+          // Emit notification:update for realtime update
+          if (this.gateway.server) {
+            this.gateway.server.to(`user:${dto?.toUserId}`).emit('notification:update', populatedNotification);
+          }
+          return populatedNotification;
+        }
+        return existing;
+      }
+    }
     const created = new this.notificationModel(dto);
     const saved = await created.save();
     
@@ -62,18 +207,17 @@ export class NotificationService {
       // تحويل البيانات لتكون في الشكل المطلوب
       const notification = { ...populatedNotification };
       
-      // إذا كان هناك postId وتم populate له، انسخ البيانات إلى data.post
+      // 🔥 إضافة البيانات المُ populate كخصائص منفصلة بدلاً من استبدال الـ IDs
       if (notification.data && notification.data.postId && typeof notification.data.postId === 'object') {
         const postData = notification.data.postId as any;
-        notification.data.post = postData;
-        notification.data.postId = postData._id;
+        notification.data.post = postData;  // إضافة البيانات كـ post
+        notification.data.postId = postData._id.toString();  // الحفاظ على postId كـ string
       }
       
-      // إذا كان هناك commentId وتم populate له، انسخ البيانات إلى data.comment
       if (notification.data && notification.data.commentId && typeof notification.data.commentId === 'object') {
         const commentData = notification.data.commentId as any;
-        notification.data.comment = commentData;
-        notification.data.commentId = commentData._id;
+        notification.data.comment = commentData;  // إضافة البيانات كـ comment
+        notification.data.commentId = commentData._id.toString();  // الحفاظ على commentId كـ string
       }
       
       this.gateway.sendNotificationToUser(dto?.toUserId, notification);
@@ -193,18 +337,17 @@ export class NotificationService {
     if (result) {
       const notification = { ...result };
       
-      // إذا كان هناك postId وتم populate له، انسخ البيانات إلى data.post
+      // 🔥 إضافة البيانات المُ populate كخصائص منفصلة
       if (notification.data && notification.data.postId && typeof notification.data.postId === 'object') {
         const postData = notification.data.postId as any;
         notification.data.post = postData;
-        notification.data.postId = postData._id;
+        notification.data.postId = postData._id.toString();  // الحفاظ على postId كـ string
       }
       
-      // إذا كان هناك commentId وتم populate له، انسخ البيانات إلى data.comment
       if (notification.data && notification.data.commentId && typeof notification.data.commentId === 'object') {
         const commentData = notification.data.commentId as any;
         notification.data.comment = commentData;
-        notification.data.commentId = commentData._id;
+        notification.data.commentId = commentData._id.toString();  // الحفاظ على commentId كـ string
       }
       
       return notification;

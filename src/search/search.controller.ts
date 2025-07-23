@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { SearchService } from './search.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags, ApiResponse, ApiBadRequestResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
 
 @ApiTags('Search')
 @ApiBearerAuth()
@@ -18,6 +18,9 @@ export class SearchController {
   constructor(private readonly searchService: SearchService) {}
 
   @Get()
+  @ApiResponse({ status: 200, description: 'Search results.' })
+  @ApiBadRequestResponse({ description: 'Missing or invalid search query (q).' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async search(
     @Query('q') q: string,
     @Query('page') page = '1',

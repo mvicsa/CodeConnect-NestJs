@@ -24,6 +24,10 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiResponse,
+  ApiBadRequestResponse,
+  ApiUnauthorizedResponse,
+  ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
@@ -39,16 +43,21 @@ export class NotificationController {
   ) {}
 
   @Get('user/:userId')
-  @ApiOperation({ summary: 'Get user notifications' })
+  @ApiOperation({ summary: 'Get user notifications', description: '⚠️ This module is still under development and may change in future releases.' })
   @ApiQuery({ name: 'limit', type: Number, required: false })
   @ApiQuery({ name: 'skip', type: Number, required: false })
   @ApiQuery({ name: 'isRead', type: String, required: false })
+  @ApiResponse({ status: 200, description: 'List of user notifications.' })
+  @ApiBadRequestResponse({ description: 'Invalid user ID or query parameters.' })
   async getUserNotifications(
     @Param('userId') userId: string,
     @Query('limit') limit = 20,
     @Query('skip') skip = 0,
     @Query('isRead') isRead?: string, // Change to string
   ) {
+    if (!userId || typeof userId !== 'string' || !isValidObjectId(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
     const query: any = { toUserId: userId };
     if (isRead !== undefined) {
       query.isRead = isRead === 'true'; // Convert string to boolean
@@ -64,7 +73,11 @@ export class NotificationController {
   }
   //  6 user status, 7 notification status
   @Patch(':id/read')
-  @ApiOperation({ summary: 'Mark notification as read' })
+  @ApiOperation({ summary: 'Mark notification as read', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'Notification marked as read.' })
+  @ApiBadRequestResponse({ description: 'Invalid notification ID.' })
+  @ApiUnauthorizedResponse({ description: 'Not authorized to mark this notification as read.' })
+  @ApiNotFoundResponse({ description: 'Notification not found.' })
   async markAsRead(@Param('id') notificationId: string, @Query('toUserId') toUserId?: string) {
     console.log('Marking notification as read:', { notificationId, toUserId });
     
@@ -150,7 +163,10 @@ export class NotificationController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get specific notification' })
+  @ApiOperation({ summary: 'Get specific notification', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'Notification found.' })
+  @ApiBadRequestResponse({ description: 'Invalid notification ID.' })
+  @ApiNotFoundResponse({ description: 'Notification not found.' })
   async getNotification(@Param('id') id: string) {
     if (!isValidObjectId(id)) {
       throw new BadRequestException('Invalid notification ID');
@@ -218,7 +234,10 @@ export class NotificationController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete notification' })
+  @ApiOperation({ summary: 'Delete notification', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'Notification deleted successfully.' })
+  @ApiBadRequestResponse({ description: 'Invalid notification ID.' })
+  @ApiNotFoundResponse({ description: 'Notification not found.' })
   async deleteNotification(@Param('id') id: string) {
     if (!isValidObjectId(id)) {
       throw new BadRequestException('Invalid notification ID');
@@ -231,8 +250,13 @@ export class NotificationController {
   }
 
   @Delete('user/:userId')
-  @ApiOperation({ summary: 'Delete all user notifications' })
+  @ApiOperation({ summary: 'Delete all user notifications', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'All user notifications deleted.' })
+  @ApiBadRequestResponse({ description: 'Invalid user ID.' })
   async deleteAllUserNotifications(@Param('userId') userId: string) {
+    if (!userId || typeof userId !== 'string' || !isValidObjectId(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
     const result = await this.notificationModel.deleteMany({ toUserId: userId });
     return { 
       message: `Deleted ${result.deletedCount} notifications`,
@@ -241,8 +265,13 @@ export class NotificationController {
   }
 
   @Patch('user/:userId/read-all')
-  @ApiOperation({ summary: 'Mark all notifications as read' })
+  @ApiOperation({ summary: 'Mark all notifications as read', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiResponse({ status: 200, description: 'All notifications marked as read.' })
+  @ApiBadRequestResponse({ description: 'Invalid user ID.' })
   async markAllAsRead(@Param('userId') userId: string) {
+    if (!userId || typeof userId !== 'string' || !isValidObjectId(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
     console.log('here in the part of mark all as read', userId);
     const result = await this.notificationModel.markAllAsRead(userId);
     

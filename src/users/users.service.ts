@@ -31,6 +31,11 @@ export class UsersService {
     return this.userModel.find().select('-password');
   }
 
+  async findByUsernames(usernames: string[]): Promise<User[]> {
+    if (!usernames || usernames.length === 0) return [];
+    return this.userModel.find({ username: { $in: usernames } }).select('_id username firstName lastName avatar');
+  }
+
   async followUser(userId: string, targetUserId: string) {
     if (userId === targetUserId) throw new Error('Cannot follow yourself');
     const user = await this.userModel.findById(userId);
@@ -64,6 +69,13 @@ export class UsersService {
     targetUser.followers = targetUser.followers.filter((id) => id !== userId);
     await user.save();
     await targetUser.save();
+    // Emit event to remove follow notification
+    this.client.emit('notification.source.deleted', {
+      type: NotificationType.FOLLOWED_USER,
+      toUserId: targetUserId.toString(),
+      fromUserId: userId.toString(),
+      followId: userId.toString(),
+    });
     return { success: true };
   }
 
@@ -105,5 +117,9 @@ export class UsersService {
       .select('-password');
     if (!user) throw new NotFoundException('User not found');
     return user;
+  }
+
+  async getUserById(userId: string) {
+    return this.userModel.findById(userId).select('username firstName lastName');
   }
 }
