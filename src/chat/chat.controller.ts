@@ -25,11 +25,7 @@ export class ChatController {
     if (!base64 || !mimetype || !originalname) {
       throw new Error('Invalid file data.');
     }
-    const fileId = await this.fileUploadService.uploadBase64File(
-      base64,
-      mimetype,
-      originalname,
-    );
+
     const fileId = await this.fileUploadService.uploadBase64File(base64, mimetype, originalname);
     return { url: `/chat/file/${fileId}` };
   }
