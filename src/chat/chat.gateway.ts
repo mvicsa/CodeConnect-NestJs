@@ -291,6 +291,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     
     try {
       const room = await this.chatService.createPrivateRoom(senderId, data.receiverId);
+      
       // Join sender to the room
       client.join((room as any)._id.toString());
 

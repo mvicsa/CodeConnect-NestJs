@@ -311,7 +311,6 @@ export class ChatService {
       throw error;
     }
   }
-
   /**
    * Remove a user from a chat room. If the last member leaves, delete the room.
    */
