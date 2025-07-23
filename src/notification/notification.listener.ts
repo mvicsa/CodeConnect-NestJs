@@ -1,19 +1,23 @@
 import { Controller, Logger } from '@nestjs/common';
-import { EventPattern, Payload, Ctx, RmqContext } from '@nestjs/microservices';
-import { CreateNotificationDto } from './dto/create-notification.dto';
-import { NotificationService } from './notification.service';
-import { ModuleRef } from '@nestjs/core';
 import {
+  EventPattern,
+  Payload,
+  Ctx,
+  RmqContext,
+  MessagePattern,
+} from '@nestjs/microservices';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import {
+  Notification,
   NotificationDocument,
   NotificationType,
 } from './entities/notification.schema';
-import { Model, ObjectId } from 'mongoose';
-import { InjectModel } from '@nestjs/mongoose';
-import { Notification } from './entities/notification.schema';
+import { CreateNotificationDto } from './dto/create-notification.dto';
+import { NotificationService } from './notification.service';
 import { NotificationGateway } from './notification.gateway';
-import { UsersService } from 'src/users/users.service';
-
-type UserLike = { _id: string; username?: string };
+import { UsersService } from '../users/users.service';
+import { ConfigService } from '@nestjs/config';
 
 function extractUserId(val: any): string {
   if (!val) return '';
@@ -89,16 +93,36 @@ function extractFirstLastUsername(val: any): string {
 @Controller()
 export class NotificationListener {
   private readonly logger = new Logger(NotificationListener.name);
+  private readonly isDebugMode: boolean;
 
   constructor(
-    private readonly notificationService: NotificationService,
-    private readonly moduleRef: ModuleRef,
     @InjectModel(Notification.name)
-    private readonly notificationModel: Model<NotificationDocument>,
+    private notificationModel: Model<NotificationDocument>,
+    private readonly notificationService: NotificationService,
     private readonly gateway: NotificationGateway,
     private readonly userService: UsersService,
+    private readonly configService: ConfigService,
   ) {
-    this.logger.log('✅ NotificationListener initialized');
+    // Only enable debug logging in development
+    this.isDebugMode = this.configService.get('NODE_ENV') === 'development';
+  }
+
+  private debugLog(message: string, data?: any) {
+    if (this.isDebugMode) {
+      if (data && typeof data === 'object') {
+        // Only log essential fields to prevent memory issues
+        const safeData = {
+          _id: data._id,
+          type: data.type,
+          toUserId: data.toUserId,
+          fromUserId: data.fromUserId,
+          // Don't log full data object
+        };
+        this.logger.debug(`${message}: ${JSON.stringify(safeData)}`);
+      } else {
+        this.logger.debug(message);
+      }
+    }
   }
 
   //---------------> 1
@@ -110,7 +134,6 @@ export class NotificationListener {
     this.logger.log('🔥 handleUserLogin triggered');
     this.logger.log(
       `📨 Received user.login event for: ${notificationDto.content}`,
-      notificationDto,
     );
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
@@ -125,7 +148,7 @@ export class NotificationListener {
           fromUserId: notificationDto.fromUserId,
           type: NotificationType.LOGIN,
         });
-        console.log('createdNotification in listener', createdNotification);
+        this.debugLog('Notification created', createdNotification);
         this.logger.log(`💾 Notification saved: ${createdNotification._id}`);
       }
       channel.ack(originalMsg);
@@ -156,9 +179,7 @@ export class NotificationListener {
       notificationDto.toUserId = extractObjectId(notificationDto.toUserId);
       notificationDto.fromUserId = extractObjectId(notificationDto.fromUserId);
       this.logger.log(`Processing post.created for `, notificationDto);
-      const userService = this.moduleRef.get<UsersService>(UsersService, {
-        strict: false,
-      });
+      const userService = this.userService; // Use the injected userService directly
       const followers: any[] = await userService.getFollowers(notificationDto.toUserId);
       if (followers.length === 0) {
         this.logger.log(
@@ -293,7 +314,7 @@ export class NotificationListener {
           type: NotificationType.COMMENT_ADDED,
           data: data.data,
         });
-        this.logger.log(`💾 Notification saved: ${notification._id}`);
+        this.debugLog('Notification created', notification);
       }
       channel.ack(originalMsg);
       this.logger.log(`✅ Acknowledged comment.added for commentId:`, data);
@@ -324,7 +345,7 @@ export class NotificationListener {
       });
       channel.ack(originalMsg);
     } catch (error) {
-      console.log('error in user.followed', error);
+      this.logger.error('Error in user.followed', error);
       channel.nack(originalMsg);
     }
   }
@@ -335,7 +356,7 @@ export class NotificationListener {
     @Payload() data: CreateNotificationDto,
     @Ctx() context: RmqContext,
   ) {
-    console.log('In handleMessageReceived', data, context);
+    this.debugLog('In handleMessageReceived', { toUserId: data?.toUserId, fromUserId: data?.fromUserId });
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
     try {
@@ -350,7 +371,7 @@ export class NotificationListener {
       }
       channel.ack(originalMsg);
     } catch (error) {
-      console.log('Error in the part of handleMessage received ok ', error);
+      this.logger.error('Error in handleMessageReceived', error);
       channel.nack(originalMsg);
     }
   }
@@ -373,7 +394,7 @@ export class NotificationListener {
           type: NotificationType.COMMENT_REACTION,
           content: `reacted to your ${isReply ? 'reply' : 'comment'}`,
         });
-        this.logger.log(`💾 Notification saved: ${createdNotification._id}`);
+        this.debugLog('Notification created', createdNotification);
       }
       channel.ack(originalMsg);
       this.logger.log(`✅ Acknowledged comment.reaction for commentId: ${data.data?.commentId}`);
@@ -391,40 +412,27 @@ export class NotificationListener {
     @Payload() data: any,
     @Ctx() context: RmqContext,
   ) {
-    this.logger.log('🔥🔥🔥 handleNotificationSourceDeleted started', data);
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
+    
     try {
-      // حذف الإشعار من DB حسب النوع
+      this.debugLog('Processing notification.source.deleted', { type: data.type });
+      
       if (data.notificationId) {
         await this.notificationModel.findByIdAndDelete(data.notificationId);
-        console.log('[NOTIFICATION] Emitting notification:delete (by notificationId)', {
-          to: `user:${data.toUserId}`,
-          notificationId: data.notificationId,
-        });
+        this.logger.log(`[NOTIFICATION] Deleted notification by ID: ${data.notificationId}`);
         this.gateway.server.to(`user:${data.toUserId}`).emit('notification:delete', {
           notificationId: data.notificationId,
         });
       }
       else if (data.type === 'USER_MENTIONED' && data.commentId) {
-        console.log('[DEBUG] Explicitly deleting USER_MENTIONED notifications for commentId:', data.commentId);
-        console.log('[DEBUG] Additional comment data:', data.commentData);
-        console.log('[DEBUG] Comment text:', data.text);
+        this.debugLog('Deleting USER_MENTIONED notifications', { commentId: data.commentId });
         
         const commentId = typeof data.commentId === 'object' && data.commentId._id
           ? data.commentId._id.toString()
           : data.commentId.toString();
         
-        // Debug: Find all USER_MENTIONED notifications to see their structure
-        const existingMentions = await this.notificationModel.find({
-          type: 'USER_MENTIONED'
-        }).limit(5).lean();
-        
-        console.log('[DEBUG] Sample USER_MENTIONED notifications structure:', 
-          JSON.stringify(existingMentions, null, 2)
-        );
-        
-        // Debug: Check if there are any mentions for this specific comment
+        // Find mentions for this specific comment (with reasonable limit)
         const mentionsForComment = await this.notificationModel.find({
           type: 'USER_MENTIONED',
           $or: [
@@ -432,12 +440,9 @@ export class NotificationListener {
             { 'data._id': commentId },
             { 'data.parentCommentId': commentId },
           ]
-        }).lean();
+        }).limit(100).lean();
         
-        console.log(`[DEBUG] Found ${mentionsForComment.length} USER_MENTIONED notifications for commentId ${commentId}`);
-        if (mentionsForComment.length > 0) {
-          console.log('[DEBUG] First mention structure:', JSON.stringify(mentionsForComment[0], null, 2));
-        }
+        this.debugLog(`Found ${mentionsForComment.length} USER_MENTIONED notifications for comment`, { commentId });
         
         // If we have the comment text, try to extract mentions and delete notifications for those users
         if (data.text) {
@@ -447,17 +452,16 @@ export class NotificationListener {
           };
           
           const mentions = extractMentions(data.text);
-          console.log('[DEBUG] Extracted mentions from comment text:', mentions);
+          this.debugLog(`Extracted ${mentions.length} mentions from comment text`);
           
           if (mentions.length > 0) {
             try {
               // Find users by usernames
               const users = await this.userService.findByUsernames(mentions as string[]);
-              console.log('[DEBUG] Found mentioned users:', users.map(u => (u as any).username));
+              this.debugLog(`Found ${users.length} mentioned users`);
               
               if (users.length > 0) {
                 const userIds = users.map(user => (user as any)._id.toString());
-                console.log('[DEBUG] User IDs for mentioned users:', userIds);
                 
                 // Delete USER_MENTIONED notifications for these specific users related to this comment
                 const mentionDeleteResult = await this.notificationModel.deleteMany({
@@ -467,12 +471,11 @@ export class NotificationListener {
                     { 'data.commentId': commentId },
                     { 'data._id': commentId },
                     { 'data.parentCommentId': commentId },
-                    // Try with the comment object directly
                     { 'data.comment._id': commentId },
                   ]
                 });
                 
-                console.log(`[DEBUG] Deleted ${mentionDeleteResult.deletedCount} mention notifications using extracted mentions`);
+                this.logger.log(`Deleted ${mentionDeleteResult.deletedCount} mention notifications using extracted mentions`);
                 
                 // Notify these users about the deletion
                 for (const userId of userIds) {
@@ -483,7 +486,7 @@ export class NotificationListener {
                 }
               }
             } catch (error) {
-              console.error('[ERROR] Error finding mentioned users:', error);
+              this.logger.error('Error finding mentioned users:', error);
             }
           }
         }
@@ -495,275 +498,90 @@ export class NotificationListener {
             { 'data.commentId': commentId },
             { 'data._id': commentId },
             { 'data.parentCommentId': commentId },
-            // Try with the comment object directly
             { 'data.comment._id': commentId },
           ],
         });
         
-        console.log('[DEBUG] USER_MENTIONED deleted count:', mentionedDeleted.deletedCount);
-        
-        // Find affected users to notify them about the deletion
-        const affectedNotifications = await this.notificationModel.find({
-          type: 'USER_MENTIONED',
-          $or: [
-            { 'data.commentId': commentId },
-            { 'data._id': commentId },
-            { 'data.parentCommentId': commentId },
-            { 'data.comment._id': commentId },
-          ],
-        }).select('toUserId');
-        
-        const affectedUsers = new Set<string>();
-        affectedNotifications.forEach(n => affectedUsers.add(n.toUserId.toString()));
-        
-        // Notify each affected user
-        for (const userId of affectedUsers) {
-          this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
-            type: 'USER_MENTIONED',
-            commentId: commentId,
-          });
-        }
+        this.logger.log(`USER_MENTIONED deleted count: ${mentionedDeleted.deletedCount}`);
       }
       else if (data.type === 'USER_MENTIONED' && data.postId) {
-        console.log('[DEBUG] Explicitly deleting USER_MENTIONED notifications for postId:', data.postId);
-        console.log('[DEBUG] Additional post data:', data.data);
+        this.debugLog('Deleting USER_MENTIONED notifications for post', { postId: data.postId });
         
         const postId = typeof data.postId === 'object' && data.postId._id
           ? data.postId._id.toString()
           : data.postId.toString();
         
-        console.log('[DEBUG] Processed postId for mention deletion:', postId);
-        
-        // Handle specific user mention deletion (when updating post)
-        if (data.toUserId && data.fromUserId) {
-          console.log(`[DEBUG] Deleting specific USER_MENTIONED notification: toUserId=${data.toUserId}, fromUserId=${data.fromUserId}, postId=${postId}`);
-          
-          const specificDeleteResult = await this.notificationModel.deleteMany({
-            type: 'USER_MENTIONED',
-            toUserId: data.toUserId,
-            fromUserId: data.fromUserId,
-            $or: [
-              { 'data.postId': postId },
-              { 'data._id': postId },
-              { 'data.post._id': postId },
-            ]
-          });
-          
-          console.log(`[DEBUG] Deleted ${specificDeleteResult.deletedCount} specific mention notifications for user ${data.toUserId}`);
-          
-          // Notify the specific user about the deletion
-          this.gateway.server.to(`user:${data.toUserId}`).emit('notification:delete', {
-            type: 'USER_MENTIONED',
-            postId: postId,
-            fromUserId: data.fromUserId,
-          });
-        } else {
-          // Handle general post mention deletion (when deleting post)
-          console.log('[DEBUG] Deleting all USER_MENTIONED notifications for postId:', postId);
-          
-          const mentionsForPost = await this.notificationModel.find({
-            type: 'USER_MENTIONED',
-            $or: [
-              { 'data.postId': postId },
-              { 'data._id': postId },
-              { 'data.post._id': postId },
-            ]
-          }).lean();
-          
-          console.log(`[DEBUG] Found ${mentionsForPost.length} USER_MENTIONED notifications for postId ${postId}`);
-          
-          if (mentionsForPost.length > 0) {
-            // Collect affected users before deletion
-            const affectedUsers = new Set<string>();
-            mentionsForPost.forEach(n => affectedUsers.add(n.toUserId.toString()));
-            
-            // Delete all mention notifications for this post
-            const mentionedDeleted = await this.notificationModel.deleteMany({
-              type: 'USER_MENTIONED',
-              $or: [
-                { 'data.postId': postId },
-                { 'data._id': postId },
-                { 'data.post._id': postId },
-              ],
-            });
-            
-            console.log(`[DEBUG] Deleted ${mentionedDeleted.deletedCount} mention notifications for postId ${postId}`);
-            
-            // Notify each affected user
-            for (const userId of affectedUsers) {
-              this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
-                type: 'USER_MENTIONED',
-                postId: postId,
-              });
-            }
-          }
-        }
-      }
-      else if (data.type === 'COMMENT_REACTION' && data.commentId) {
-        console.log('[DEBUG] Deleting comment reaction with data:', {
-          toUserId: data.toUserId,
-          fromUserId: data.fromUserId,
-          commentId: data.commentId,
-          type: data.type,
-          isReply: data.isReply,
-          isMainComment: data.isMainComment,
-          parentCommentId: data.parentCommentId
+        // Simple deletion without extensive debugging
+        const mentionedDeleted = await this.notificationModel.deleteMany({
+          type: 'USER_MENTIONED',
+          $or: [
+            { 'data.postId': postId },
+            { 'data._id': postId },
+            { 'data.post._id': postId },
+          ],
         });
-
+        
+        this.logger.log(`Deleted ${mentionedDeleted.deletedCount} mention notifications for post ${postId}`);
+      }
+      else if (data.type === 'COMMENT_REACTION') {
+        this.debugLog('Deleting COMMENT_REACTION notifications', { commentId: data.commentId });
+        
         const commentId = typeof data.commentId === 'object' && data.commentId._id
           ? data.commentId._id.toString()
           : data.commentId.toString();
-
-        console.log(`[DEBUG] Processing COMMENT_REACTION deletion for commentId: ${commentId}`);
         
-        // 🔥 استخدام الطريقة المحسنة للبحث والحذف
-        const allReactionNotifications = await this.notificationModel.find({
+        // Find relevant reactions (with reasonable limit)
+        const reactionNotifications = await this.notificationModel.find({
           type: 'COMMENT_REACTION'
-        }).lean();
+        }).limit(1000).lean();
         
-        console.log(`[DEBUG] Searching through ${allReactionNotifications.length} reaction notifications`);
-        
-        // فلترة الإشعارات المرتبطة بالتعليق/الرد المحذوف
-        const relevantReactions = allReactionNotifications.filter(notification => {
+        const relevantReactions = reactionNotifications.filter(notification => {
           if (!notification.data) return false;
-          
-          // التحقق من جميع الطرق المحتملة لتخزين معرف التعليق
-          const commentMatches = 
+          return (
             (notification.data.commentId && notification.data.commentId.toString() === commentId) ||
             (notification.data._id && notification.data._id.toString() === commentId) ||
             (notification.data.comment && notification.data.comment._id && 
-             notification.data.comment._id.toString() === commentId) ||
-            (notification.data.comment && notification.data.comment.commentId && 
-             notification.data.comment.commentId.toString() === commentId) ||
-            // البحث في أي مكان في البيانات
-            JSON.stringify(notification.data).includes(commentId);
-             
-          return commentMatches;
+             notification.data.comment._id.toString() === commentId)
+          );
         });
         
-        console.log(`[DEBUG] Found ${relevantReactions.length} relevant COMMENT_REACTION notifications for ${data.isReply ? 'reply' : 'comment'} ${commentId}`);
-        
-        let deletedCount = 0;
+        this.debugLog(`Found ${relevantReactions.length} relevant COMMENT_REACTION notifications`);
         
         if (relevantReactions.length > 0) {
-          // عرض أمثلة على الإشعارات الموجودة
-          relevantReactions.slice(0, 2).forEach((notif, index) => {
-            console.log(`[DEBUG] Relevant reaction notification ${index + 1}:`, {
-              _id: notif._id,
-              type: notif.type,
-              toUserId: notif.toUserId,
-              fromUserId: notif.fromUserId,
-              data: notif.data
-            });
-          });
-          
-          // حذف الإشعارات بالـ IDs
           const reactionIds = relevantReactions.map(r => r._id);
-          const deletedReactionsResult = await this.notificationModel.deleteMany({
+          const deletedResult = await this.notificationModel.deleteMany({
             _id: { $in: reactionIds }
           });
           
-          deletedCount = deletedReactionsResult.deletedCount;
-          console.log(`[DEBUG] Deleted ${deletedCount} COMMENT_REACTION notifications by ID for ${data.isReply ? 'reply' : 'comment'} ${commentId}`);
+          this.logger.log(`Deleted ${deletedResult.deletedCount} COMMENT_REACTION notifications for comment ${commentId}`);
           
-          // إرسال إشعار للمستخدمين المتأثرين
-          const affectedUsers = new Set<string>();
-          relevantReactions.forEach(notif => affectedUsers.add(notif.toUserId.toString()));
-          
+          // Notify affected users
+          const affectedUsers = new Set(relevantReactions.map(r => r.toUserId.toString()));
           for (const userId of affectedUsers) {
-            console.log(`[DEBUG] Sending reaction delete notification to user: ${userId} for ${data.isReply ? 'reply' : 'comment'}: ${commentId}`);
             this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
               type: 'COMMENT_REACTION',
               commentId: commentId,
-              isReply: data.isReply,
-              parentCommentId: data.parentCommentId
             });
           }
         }
-
-        // حذف إضافي بالاستعلامات التقليدية للتأكد
-        const traditionalQueries = [
-          { type: 'COMMENT_REACTION', 'data.commentId': commentId },
-          { type: 'COMMENT_REACTION', 'data._id': commentId },
-          { type: 'COMMENT_REACTION', 'data.comment._id': commentId }
-        ];
-        
-        // إضافة toUserId إذا كان متوفر
-        if (data.toUserId) {
-        const toUserId = typeof data.toUserId === 'object' && data.toUserId._id
-          ? data.toUserId._id
-          : data.toUserId;
-
-          traditionalQueries.forEach(query => {
-            query['toUserId'] = toUserId;
-          });
-        }
-
-        // إضافة fromUserId إذا كان متوفر
-        if (data.fromUserId) {
-        const fromUserId = typeof data.fromUserId === 'object' && data.fromUserId._id
-          ? data.fromUserId._id
-          : data.fromUserId;
-
-          traditionalQueries.forEach(query => {
-            query['fromUserId'] = fromUserId;
-          });
-        }
-
-        for (const [index, query] of traditionalQueries.entries()) {
-          try {
-            const additionalDeleted = await this.notificationModel.deleteMany(query);
-            if (additionalDeleted.deletedCount > 0) {
-              deletedCount += additionalDeleted.deletedCount;
-              console.log(`[DEBUG] Traditional query ${index + 1} deleted ${additionalDeleted.deletedCount} additional notifications`);
-            }
-          } catch (error) {
-            console.error(`[ERROR] Traditional query ${index + 1} failed:`, error.message);
-          }
-        }
-
-        console.log(`[NOTIFICATION] Total deleted ${deletedCount} comment reaction notifications for ${data.isReply ? 'reply' : 'comment'} ${commentId}`, {
-          type: 'COMMENT_REACTION',
-          commentId: data.commentId,
-          isReply: data.isReply,
-          parentCommentId: data.parentCommentId
-        });
-
-        // إرسال إشعار عام للحذف إذا لم يتم إرسال إشعارات محددة
-        if (deletedCount > 0 && data.toUserId) {
-        this.gateway.server.to(`user:${data.toUserId}`).emit('notification:delete', {
-          type: 'COMMENT_REACTION',
-          commentId: data.commentId,
-          fromUserId: data.fromUserId,
-        });
       }
-      }
-
       else if (data.type === 'POST_REACTION' && data.postId) {
-        const deleteQuery: any = {
+        const postId = typeof data.postId === 'object' && data.postId._id
+          ? data.postId._id.toString()
+          : data.postId.toString();
+        
+        const deletedNotifications = await this.notificationModel.deleteMany({
           toUserId: data.toUserId,
-          type: 'POST_REACTION',
-          'data.postId': data.postId,
-        };
-
-        // إضافة fromUserId إذا كان متوفر للدقة أكثر
-        if (data.fromUserId) {
-          deleteQuery.fromUserId = data.fromUserId;
-        }
-
-        const deletedNotifications = await this.notificationModel.deleteMany(deleteQuery);
-
-        console.log(`[NOTIFICATION] Deleted ${deletedNotifications.deletedCount} post reaction notifications`, {
-          to: `user:${data.toUserId}`,
-          type: 'POST_REACTION',
-          postId: data.postId,
           fromUserId: data.fromUserId,
+          type: 'POST_REACTION',
+          'data.postId': postId,
         });
+
+        this.logger.log(`Deleted ${deletedNotifications.deletedCount} post reaction notifications`);
 
         this.gateway.server.to(`user:${data.toUserId}`).emit('notification:delete', {
           type: 'POST_REACTION',
-          postId: data.postId,
-          fromUserId: data.fromUserId,
+          postId: postId,
         });
       }
       else if (data.type === 'FOLLOWED_USER' && data.followId) {
@@ -773,11 +591,7 @@ export class NotificationListener {
           'data.followerId': data.followId,
         });
 
-        console.log(`[NOTIFICATION] Deleted ${deletedNotifications.deletedCount} follow notifications`, {
-          to: `user:${data.toUserId}`,
-          type: 'FOLLOWED_USER',
-          followId: data.followId,
-        });
+        this.logger.log(`Deleted ${deletedNotifications.deletedCount} follow notifications`);
 
         this.gateway.server.to(`user:${data.toUserId}`).emit('notification:delete', {
           type: 'FOLLOWED_USER',
@@ -785,658 +599,88 @@ export class NotificationListener {
         });
       }
       else if (data.type === 'COMMENT_ADDED' && data.commentId) {
-        console.log('[DEBUG] Deleting comment added notification with data:', {
-          toUserId: data.toUserId,
-          commentId: data.commentId,
-          type: data.type
-        });
-        // تنظيف البيانات
+        this.debugLog('Deleting COMMENT_ADDED notifications', { commentId: data.commentId, toUserId: data.toUserId });
+        
         const toUserId = typeof data.toUserId === 'object' && data.toUserId._id
           ? data.toUserId._id.toString()
           : data.toUserId.toString();
         const commentId = typeof data.commentId === 'object' && data.commentId._id
           ? data.commentId._id.toString()
           : data.commentId.toString();
-          
-        console.log('[DEBUG] Cleaned commentId for deletion:', commentId);
-        console.log('[DEBUG] Cleaned toUserId for deletion:', toUserId);
         
-        // 🔥 أولاً، نتحقق من جميع الإشعارات الموجودة في قاعدة البيانات لنفهم البنية
-        const allNotifications = await this.notificationModel.find({
-          $or: [
-            { toUserId: toUserId },
-            { 'data.commentId': commentId },
-            { 'data._id': commentId }
-          ]
-        }).limit(10).lean();
-        
-        console.log(`[DEBUG] Found ${allNotifications.length} potentially related notifications:`);
-        allNotifications.forEach((notif, index) => {
-          console.log(`[DEBUG] Notification ${index + 1}:`, {
-            _id: notif._id,
-            type: notif.type,
-            toUserId: notif.toUserId,
-            fromUserId: notif.fromUserId,
-            data: JSON.stringify(notif.data, null, 2)
-          });
-        });
-        
-        // Check for mentions with this comment ID in different locations
-        const mentionQueries = [
-          { type: 'USER_MENTIONED', 'data.commentId': commentId },
-          { type: 'USER_MENTIONED', 'data._id': commentId },
-          { type: 'USER_MENTIONED', 'data.parentCommentId': commentId },
-          // Try with the comment object directly
-          { type: 'USER_MENTIONED', 'data.comment._id': commentId },
-        ];
-        
-        // Debug: Check each query individually
-        for (const query of mentionQueries) {
-          const count = await this.notificationModel.countDocuments(query);
-          console.log(`[DEBUG] Query ${JSON.stringify(query)} found ${count} notifications`);
-          
-          if (count > 0) {
-            const samples = await this.notificationModel.find(query).limit(2).lean();
-            console.log(`[DEBUG] Sample results for query:`, samples.map(s => ({
-              _id: s._id,
-              type: s.type,
-              data: s.data
-            })));
-          }
-        }
-        
-        // التحقق من استعلامات COMMENT_ADDED
-        const commentQueries = [
+        // Simplified deletion without extensive debugging
+        const deleteQueries = [
           { toUserId: toUserId, type: 'COMMENT_ADDED', 'data.commentId': commentId },
           { toUserId: toUserId, type: 'COMMENT_ADDED', 'data._id': commentId },
           { type: 'COMMENT_ADDED', 'data.commentId': commentId },
           { type: 'COMMENT_ADDED', 'data._id': commentId },
-          { type: 'COMMENT_ADDED', 'data.comment._id': commentId },
-          { type: 'COMMENT_ADDED', 'data.comment.commentId': commentId }
         ];
         
-        console.log('[DEBUG] Testing COMMENT_ADDED queries:');
-        for (const query of commentQueries) {
-          const count = await this.notificationModel.countDocuments(query);
-          console.log(`[DEBUG] Query ${JSON.stringify(query)} found ${count} notifications`);
-          
-          if (count > 0) {
-            const samples = await this.notificationModel.find(query).limit(2).lean();
-            console.log(`[DEBUG] Sample COMMENT_ADDED results:`, samples.map(s => ({
-              _id: s._id,
-              type: s.type,
-              toUserId: s.toUserId,
-              data: s.data
-            })));
-          }
+        let totalDeleted = 0;
+        for (const query of deleteQueries) {
+          const deletedResult = await this.notificationModel.deleteMany(query);
+          totalDeleted += deletedResult.deletedCount;
         }
         
-        // Try a more flexible approach for finding mentions
-        const allMentionsWithComment = await this.notificationModel.find({
-          type: 'USER_MENTIONED',
-        }).lean();
-        
-        const relevantMentions = allMentionsWithComment.filter(notification => {
-          if (!notification.data) return false;
-          
-          // Check all possible paths where the comment ID might be stored
-          const commentMatches = 
-            (notification.data.commentId && notification.data.commentId.toString() === commentId) ||
-            (notification.data._id && notification.data._id.toString() === commentId) ||
-            (notification.data.parentCommentId && notification.data.parentCommentId.toString() === commentId) ||
-            (notification.data.comment && notification.data.comment._id && 
-             notification.data.comment._id.toString() === commentId);
-             
-          return commentMatches;
-        });
-        
-        console.log(`[DEBUG] Found ${relevantMentions.length} relevant mentions using manual filtering`);
-        if (relevantMentions.length > 0) {
-          console.log('[DEBUG] First relevant mention:', JSON.stringify(relevantMentions[0], null, 2));
-          
-          // Delete these mentions by ID
-          const mentionIds = relevantMentions.map(m => m._id);
-          const manualDeleteResult = await this.notificationModel.deleteMany({
-            _id: { $in: mentionIds }
-          });
-          console.log(`[DEBUG] Manually deleted ${manualDeleteResult.deletedCount} mention notifications`);
-        }
-        
-        // حذف robust لكل إشعارات المنشن المرتبطة بالتعليق أو الرد
-        const mentionedDeleted = await this.notificationModel.deleteMany({
-          type: 'USER_MENTIONED',
-          $or: [
-            { 'data.commentId': commentId },
-            { 'data._id': commentId },
-            { 'data.parentCommentId': commentId },
-          ],
-        });
-        console.log('[DEBUG] USER_MENTIONED deleted count:', mentionedDeleted.deletedCount);
-
-        // 🔥 حذف إشعارات التفاعلات (COMMENT_REACTION) المرتبطة بالتعليق المحذوف
-        console.log('[DEBUG] Deleting COMMENT_REACTION notifications for commentId:', commentId);
-        
-        // أولاً، البحث عن جميع إشعارات التفاعلات التي قد تكون مرتبطة بهذا التعليق
-        const allReactionNotifications = await this.notificationModel.find({
-          type: 'COMMENT_REACTION'
-        }).lean();
-        
-        console.log(`[DEBUG] Total COMMENT_REACTION notifications in database: ${allReactionNotifications.length}`);
-        
-        // فلترة الإشعارات المرتبطة بالتعليق المحذوف
-        const relevantReactions = allReactionNotifications.filter(notification => {
-          if (!notification.data) return false;
-          
-          // التحقق من جميع الطرق المحتملة لتخزين معرف التعليق
-          const commentMatches = 
-            (notification.data.commentId && notification.data.commentId.toString() === commentId) ||
-            (notification.data._id && notification.data._id.toString() === commentId) ||
-            (notification.data.comment && notification.data.comment._id && 
-             notification.data.comment._id.toString() === commentId) ||
-            (notification.data.comment && notification.data.comment.commentId && 
-             notification.data.comment.commentId.toString() === commentId) ||
-            // البحث في أي مكان في البيانات
-            JSON.stringify(notification.data).includes(commentId);
-             
-          return commentMatches;
-        });
-        
-        console.log(`[DEBUG] Found ${relevantReactions.length} relevant COMMENT_REACTION notifications`);
-        
-        if (relevantReactions.length > 0) {
-          // عرض أمثلة على الإشعارات الموجودة
-          relevantReactions.slice(0, 3).forEach((notif, index) => {
-            console.log(`[DEBUG] Relevant reaction notification ${index + 1}:`, {
-              _id: notif._id,
-              type: notif.type,
-              toUserId: notif.toUserId,
-              fromUserId: notif.fromUserId,
-              data: notif.data
-            });
-          });
-          
-          // حذف الإشعارات بالـ IDs
-          const reactionIds = relevantReactions.map(r => r._id);
-          const deletedReactionsResult = await this.notificationModel.deleteMany({
-            _id: { $in: reactionIds }
-          });
-          
-          console.log(`[DEBUG] Deleted ${deletedReactionsResult.deletedCount} COMMENT_REACTION notifications by ID`);
-          
-          // إرسال إشعار للمستخدمين المتأثرين
-          const affectedUsers = new Set<string>();
-          relevantReactions.forEach(notif => affectedUsers.add(notif.toUserId.toString()));
-          
-          for (const userId of affectedUsers) {
-            console.log(`[DEBUG] Sending reaction delete notification to user: ${userId}`);
-            this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
-              type: 'COMMENT_REACTION',
-              commentId: commentId,
-            });
-          }
-        }
-        
-        // كذلك، حذف إضافي بالاستعلامات التقليدية للتأكد
-        const reactionDeleteQueries = [
-          { type: 'COMMENT_REACTION', 'data.commentId': commentId },
-          { type: 'COMMENT_REACTION', 'data._id': commentId },
-          { type: 'COMMENT_REACTION', 'data.comment._id': commentId },
-          { type: 'COMMENT_REACTION', 'data.comment.commentId': commentId }
-        ];
-        
-        let totalReactionsDeleted = relevantReactions.length;
-        for (const [index, query] of reactionDeleteQueries.entries()) {
-          try {
-            const deletedResult = await this.notificationModel.deleteMany(query);
-            if (deletedResult.deletedCount > 0) {
-              totalReactionsDeleted += deletedResult.deletedCount;
-              console.log(`[DEBUG] Additional reaction query ${index + 1} deleted ${deletedResult.deletedCount} notifications`);
-            }
-          } catch (error) {
-            console.error(`[ERROR] Reaction query ${index + 1} failed:`, error.message);
-          }
-        }
-        
-        console.log(`[DEBUG] Total COMMENT_REACTION notifications deleted: ${totalReactionsDeleted}`);
-        
-        // 🔥 فحص خاص لإشعارات التفاعلات الخاصة بصاحب التعليق
-        console.log('[DEBUG] Checking for remaining reaction notifications for comment owner...');
-        const ownerReactionNotifications = await this.notificationModel.find({
-          type: 'COMMENT_REACTION',
-          toUserId: toUserId
-        }).lean();
-        
-        console.log(`[DEBUG] Found ${ownerReactionNotifications.length} COMMENT_REACTION notifications for comment owner (${toUserId})`);
-        
-        if (ownerReactionNotifications.length > 0) {
-          console.log('[DEBUG] Comment owner reaction notifications:');
-          ownerReactionNotifications.forEach((notif, index) => {
-            const isRelated = 
-              (notif.data.commentId && notif.data.commentId.toString() === commentId) ||
-              (notif.data._id && notif.data._id.toString() === commentId) ||
-              (notif.data.comment && notif.data.comment._id && 
-               notif.data.comment._id.toString() === commentId) ||
-              JSON.stringify(notif.data).includes(commentId);
-               
-            console.log(`[DEBUG] Owner reaction ${index + 1} (Related: ${isRelated}):`, {
-              _id: notif._id,
-              toUserId: notif.toUserId,
-              fromUserId: notif.fromUserId,
-              data: notif.data
-            });
-            
-            // إذا كان مرتبط بالتعليق المحذوف، احذفه فورياً
-            if (isRelated) {
-              console.log(`[DEBUG] Deleting related owner reaction notification: ${notif._id}`);
-              this.notificationModel.findByIdAndDelete(notif._id).catch(error => {
-                console.error(`[ERROR] Failed to delete owner reaction ${notif._id}:`, error);
-              });
-              
-              // إرسال إشعار حذف للمالك
-              this.gateway.server.to(`user:${toUserId}`).emit('notification:delete', {
-                type: 'COMMENT_REACTION',
-                commentId: commentId,
-                notificationId: notif._id.toString()
-              });
-            }
-          });
-        }
-
-        // 🔥 حذف إشعارات الردود (COMMENT_ADDED) اللي parentCommentId بتاعها هو التعليق المحذوف
+        // Delete related reply notifications
         const repliesDeleted = await this.notificationModel.deleteMany({
           type: 'COMMENT_ADDED',
           $or: [
             { 'data.parentCommentId': commentId },
             { 'data.comment.parentCommentId': commentId },
-            { 'data.commentId': commentId }, // أحياناً الرد نفسه متخزن كده
           ],
         });
-        console.log('[DEBUG] COMMENT_ADDED deleted count (replies to deleted comment):', repliesDeleted.deletedCount);
         
-        // 🔥 البحث عن الردود المرتبطة بالتعليق المحذوف وحذف تفاعلاتها أيضاً
-        try {
-          const Model = this.notificationModel.db.model('Comment');
-          const replyComments = await Model.find({ parentCommentId: commentId }).select('_id').lean();
-          const replyIds = replyComments.map((reply: any) => reply._id.toString());
-          
-          console.log(`[DEBUG] Found ${replyIds.length} reply comments to delete reactions for`);
-          
-          if (replyIds.length > 0) {
-            console.log(`[DEBUG] Reply IDs: ${replyIds.join(', ')}`);
-            
-            // 🔥 استخدام نفس الطريقة المحسنة للبحث عن إشعارات تفاعلات الردود
-            const allReactionNotifications = await this.notificationModel.find({
-              type: 'COMMENT_REACTION'
-            }).lean();
-            
-            console.log(`[DEBUG] Searching through ${allReactionNotifications.length} reaction notifications for replies`);
-            
-            let totalReplyReactionsDeleted = 0;
-            const allReplyReactionIds: any[] = [];
-            
-            // البحث عن الإشعارات المرتبطة بكل رد
-            for (const replyId of replyIds) {
-              console.log(`[DEBUG] Processing reply ID: ${replyId}`);
-              
-              const relevantReplyReactions = allReactionNotifications.filter(notification => {
-                if (!notification.data) return false;
-                
-                // التحقق من جميع الطرق المحتملة لتخزين معرف الرد
-                const replyMatches = 
-                  (notification.data.commentId && notification.data.commentId.toString() === replyId) ||
-                  (notification.data._id && notification.data._id.toString() === replyId) ||
-                  (notification.data.comment && notification.data.comment._id && 
-                   notification.data.comment._id.toString() === replyId) ||
-                  (notification.data.comment && notification.data.comment.commentId && 
-                   notification.data.comment.commentId.toString() === replyId) ||
-                  // البحث في أي مكان في البيانات
-                  JSON.stringify(notification.data).includes(replyId);
-                   
-                return replyMatches;
-              });
-              
-              console.log(`[DEBUG] Found ${relevantReplyReactions.length} reaction notifications for reply ${replyId}`);
-              
-              if (relevantReplyReactions.length > 0) {
-                // عرض أمثلة على الإشعارات
-                relevantReplyReactions.slice(0, 2).forEach((notif, index) => {
-                  console.log(`[DEBUG] Reply reaction ${index + 1} for ${replyId}:`, {
-                    _id: notif._id,
-                    toUserId: notif.toUserId,
-                    fromUserId: notif.fromUserId,
-                    data: notif.data
-                  });
-                });
-                
-                // جمع IDs للحذف
-                const replyReactionIds = relevantReplyReactions.map(r => r._id);
-                allReplyReactionIds.push(...replyReactionIds);
-                
-                // إرسال إشعار للمستخدمين المتأثرين قبل الحذف
-                const affectedUsers = new Set<string>();
-                relevantReplyReactions.forEach(notif => affectedUsers.add(notif.toUserId.toString()));
-                
-                for (const userId of affectedUsers) {
-                  console.log(`[DEBUG] Sending reply reaction delete notification to user: ${userId} for reply: ${replyId}`);
-                  this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
-                    type: 'COMMENT_REACTION',
-                    commentId: replyId,
-                  });
-                }
-              }
-            }
-            
-            // حذف جميع إشعارات تفاعلات الردود دفعة واحدة
-            if (allReplyReactionIds.length > 0) {
-              const deletedReplyReactionsResult = await this.notificationModel.deleteMany({
-                _id: { $in: allReplyReactionIds }
-              });
-              totalReplyReactionsDeleted = deletedReplyReactionsResult.deletedCount;
-              console.log(`[DEBUG] Deleted ${totalReplyReactionsDeleted} reply reaction notifications by ID`);
-            }
-            
-            // حذف إضافي بالاستعلامات التقليدية للتأكد
-            for (const replyId of replyIds) {
-              const replyReactionQueries = [
-                { type: 'COMMENT_REACTION', 'data.commentId': replyId },
-                { type: 'COMMENT_REACTION', 'data._id': replyId },
-                { type: 'COMMENT_REACTION', 'data.comment._id': replyId }
-              ];
-              
-              for (const query of replyReactionQueries) {
-                try {
-                  const additionalDeleted = await this.notificationModel.deleteMany(query);
-                  if (additionalDeleted.deletedCount > 0) {
-                    totalReplyReactionsDeleted += additionalDeleted.deletedCount;
-                    console.log(`[DEBUG] Additional query deleted ${additionalDeleted.deletedCount} notifications for reply ${replyId}`);
-                  }
-                } catch (error) {
-                  console.error(`[ERROR] Failed to delete additional reactions for reply ${replyId}:`, error.message);
-                }
-              }
-            }
-            
-            console.log(`[DEBUG] Total reply COMMENT_REACTION notifications deleted: ${totalReplyReactionsDeleted}`);
-          }
-        } catch (error) {
-          console.error('[ERROR] Failed to find and delete reply reactions:', error);
-        }
-
-        // حذف إشعارات COMMENT_ADDED بنفس الطريقة القديمة
-        const deleteQueries = [
-          { toUserId: toUserId, type: 'COMMENT_ADDED', 'data.commentId': commentId },
-          { toUserId: toUserId, type: 'COMMENT_ADDED', 'data._id': commentId },
-        ];
-        let totalDeleted = 0;
-        for (const query of deleteQueries) {
-          const existing = await this.notificationModel.find(query);
-          if (existing && existing.length > 0) {
-            const deletedNotifications = await this.notificationModel.deleteMany(query);
-            totalDeleted += deletedNotifications.deletedCount;
-          }
-        }
+        this.logger.log(`Total deleted comment notifications: ${totalDeleted}`);
+        this.logger.log(`Total deleted reply notifications: ${repliesDeleted.deletedCount}`);
         
-        // 🔥 محاولات حذف إضافية شاملة
-        const additionalDeleteQueries = [
-          // بدون تحديد المستخدم - للحذف الشامل
-          { type: 'COMMENT_ADDED', 'data.commentId': commentId },
-          { type: 'COMMENT_ADDED', 'data._id': commentId },
-          { type: 'COMMENT_ADDED', 'data.comment._id': commentId },
-          { type: 'COMMENT_ADDED', 'data.comment.commentId': commentId },
-          
-          // مع المستخدم المحدد
-          { toUserId: toUserId, type: 'COMMENT_ADDED', 'data.comment._id': commentId },
-          { toUserId: toUserId, type: 'COMMENT_ADDED', 'data.comment.commentId': commentId },
-          
-          // البحث في كامل الـ data object
-          { type: 'COMMENT_ADDED', 'data': { $regex: commentId } },
-          { toUserId: toUserId, type: 'COMMENT_ADDED', 'data': { $regex: commentId } }
-        ];
-        
-        console.log('[DEBUG] Attempting additional deletion methods...');
-        for (const [index, query] of additionalDeleteQueries.entries()) {
-          try {
-            const existing = await this.notificationModel.find(query).lean();
-            console.log(`[DEBUG] Additional query ${index + 1} found ${existing.length} notifications:`, JSON.stringify(query));
-            
-            if (existing.length > 0) {
-              const deletedResult = await this.notificationModel.deleteMany(query);
-              totalDeleted += deletedResult.deletedCount;
-              console.log(`[DEBUG] Additional query ${index + 1} deleted ${deletedResult.deletedCount} notifications`);
-            }
-          } catch (error) {
-            console.error(`[ERROR] Additional query ${index + 1} failed:`, error.message);
-          }
-        }
-        
-        console.log(`[NOTIFICATION] Total deleted comment notifications: ${totalDeleted}`, {
-          to: `user:${toUserId}`,
-          type: 'COMMENT_ADDED',
-          commentId: commentId,
-        });
-        console.log(`[NOTIFICATION] Total deleted reply notifications: ${repliesDeleted.deletedCount}`, {
-          type: 'COMMENT_ADDED',
-          parentCommentId: commentId,
-        });
-        // إرسال إشعار للعميل بالحذف للتعليق الأساسي
+        // Send delete events
         this.gateway.server.to(`user:${toUserId}`).emit('notification:delete', {
           type: 'COMMENT_ADDED',
           commentId: commentId,
         });
-
-        // 🔥 إرسال إشعار للعميل بحذف إشعارات الردود كمان
+        
         if (repliesDeleted.deletedCount > 0) {
-          console.log('[NOTIFICATION] Emitting socket event for deleted reply notifications');
           this.gateway.server.emit('notification:delete', {
             type: 'COMMENT_ADDED',
-            commentId: commentId, // commentId هنا هو parentCommentId للردود
+            commentId: commentId,
           });
-        }
-        
-        // 🔥 فحص نهائي للإشعارات المتبقية
-        console.log('[DEBUG] Final check for remaining notifications...');
-        const remainingNotifications = await this.notificationModel.find({
-          $or: [
-            { toUserId: toUserId, type: 'COMMENT_ADDED' },
-            { type: 'COMMENT_ADDED', 'data.commentId': commentId },
-            { type: 'COMMENT_ADDED', 'data._id': commentId },
-            { type: 'USER_MENTIONED', 'data.commentId': commentId },
-            { type: 'USER_MENTIONED', 'data._id': commentId },
-            // إضافة فحص إشعارات التفاعلات
-            { type: 'COMMENT_REACTION', 'data.commentId': commentId },
-            { type: 'COMMENT_REACTION', 'data._id': commentId },
-            { type: 'COMMENT_REACTION', 'data.comment._id': commentId }
-          ]
-        }).lean();
-        
-        if (remainingNotifications.length > 0) {
-          console.log(`⚠️ [WARNING] ${remainingNotifications.length} notifications still remain after deletion:`);
-          
-          // تجميع الإشعارات حسب النوع
-          const remainingByType = remainingNotifications.reduce((acc, notif) => {
-            acc[notif.type] = (acc[notif.type] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>);
-          
-          console.log(`[WARNING] Remaining notifications by type:`, remainingByType);
-          
-          remainingNotifications.forEach((notif, index) => {
-            console.log(`[WARNING] Remaining notification ${index + 1}:`, {
-              _id: notif._id,
-              type: notif.type,
-              toUserId: notif.toUserId,
-              fromUserId: notif.fromUserId,
-              data: JSON.stringify(notif.data, null, 2)
-            });
-          });
-          
-          // محاولة حذف أخيرة للإشعارات المتبقية
-          try {
-            const forceDeleteIds = remainingNotifications.map(n => n._id);
-            const forceDeleteResult = await this.notificationModel.deleteMany({
-              _id: { $in: forceDeleteIds }
-            });
-            console.log(`🔥 [FORCE DELETE] Successfully deleted ${forceDeleteResult.deletedCount} remaining notifications by ID`);
-            
-            // إرسال إشعار حذف لكل نوع من الإشعارات المحذوفة
-            const deletedByType = remainingNotifications.reduce((acc, notif) => {
-              if (!acc[notif.type]) acc[notif.type] = new Set();
-              acc[notif.type].add(notif.toUserId.toString());
-              return acc;
-            }, {} as Record<string, Set<string>>);
-            
-            for (const [type, userIds] of Object.entries(deletedByType)) {
-              for (const userId of userIds) {
-                this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
-                  type: type,
-                  commentId: commentId,
-                  forceDeleted: true
-                });
-              }
-            }
-          } catch (forceError) {
-            console.error('❌ [FORCE DELETE] Failed to delete remaining notifications:', forceError);
-          }
-        } else {
-          console.log('✅ [SUCCESS] No notifications remaining - all deleted successfully');
         }
       }
-
       else if (data.type === 'POST' && data.postId) {
+        this.debugLog('Deleting POST notifications', { postId: data.postId });
+        
+        const postId = typeof data.postId === 'object' && data.postId._id
+          ? data.postId._id.toString()
+          : data.postId.toString();
+        
         try {
-          const postId = data.postId;
-          
-           console.log('🔍 [DEBUG] Checking notifications for postId:', postId);
-           
-          // تحسين الاستعلام ليشمل جميع الحالات المحتملة
           const deleteQuery = {
-             $or: [
-              // الحالات الأساسية
-              { 'data.postId': postId },           
-              { 'data.postId._id': postId },       
-              { 'data.post._id': postId },         
-              { 'data._id': postId },              
-              
-              // حالات إضافية محتملة
-              { 'data.post.postId': postId },
-              { 'data.post.id': postId },
-              { 'data.id': postId },
-              
-              // للتعليقات المرتبطة بالمنشور
-              { 'data.comment.postId': postId },
-              { 'data.comment.post._id': postId },
-              { 'data.comment.post.postId': postId },
-              
-              // للـ mentions المرتبطة بالمنشور
-              { 'data.postId': { $eq: postId } },
-              
-              // ObjectId comparison
-              ...(postId.length === 24 ? [
-                { 'data.postId': { $eq: new this.notificationModel.base.Types.ObjectId(postId) } },
-                { 'data.post._id': { $eq: new this.notificationModel.base.Types.ObjectId(postId) } }
-              ] : [])
-            ]
-          };
-          
-          // أولاً، البحث عن التعليقات المرتبطة بهذا المنشور لحذف إشعاراتها أيضًا
-          let commentRelatedQueries: any[] = [];
-          try {
-            // البحث عن التعليقات المرتبطة بالمنشور
-            const Model = this.notificationModel.db.model('Comment');
-            const relatedComments = await Model.find({ postId: postId }).select('_id').lean();
-            const commentIds = relatedComments.map((c: any) => c._id.toString());
-            
-            console.log(`🔍 [DEBUG] Found ${commentIds.length} comments related to post ${postId}`);
-            
-            if (commentIds.length > 0) {
-              // إنشاء استعلامات منفصلة للتعليقات المرتبطة
-              commentRelatedQueries = commentIds.flatMap(commentId => [
-                { 'data.commentId': commentId },
-                { 'data._id': commentId },
-                { 'data.comment._id': commentId },
-                { 'data.comment.commentId': commentId }
-              ]);
-              
-              console.log(`🔍 [DEBUG] Created ${commentRelatedQueries.length} additional queries for related comments`);
-            }
-          } catch (commentError) {
-            console.error('❌ Error finding related comments:', commentError);
-          }
-          
-          // دمج جميع الاستعلامات
-          const finalDeleteQuery = {
             $or: [
-              ...deleteQuery.$or,
-              ...commentRelatedQueries
+              { 'data.postId': postId },
+              { 'data._id': postId },
+              { 'data.post._id': postId },
             ]
           };
           
-          // البحث عن كل الإشعارات المرتبطة بالبوست أولاً
-          const allPostNotifications = await this.notificationModel.find(finalDeleteQuery).lean();
-           
-           console.log(`🔍 [DEBUG] Found ${allPostNotifications.length} notifications for postId: ${postId}`);
-           
-           if (allPostNotifications.length > 0) {
-            console.log('🔍 [DEBUG] Sample notification structures:');
-            
-            // إظهار أمثلة على هياكل الإشعارات المختلفة
-            const sampleTypes = new Map();
-            allPostNotifications.forEach((notif, index) => {
-              if (index < 3) { // أول 3 فقط
-                console.log(`🔍 [DEBUG] Notification ${index + 1}:`, {
-                  _id: notif._id,
-                  type: notif.type,
-                  toUserId: notif.toUserId,
-                  data: notif.data,
-                });
-              }
-              
-              // تجميع حسب النوع
-              const count = sampleTypes.get(notif.type) || 0;
-              sampleTypes.set(notif.type, count + 1);
-            });
-            
-            console.log('🔍 [DEBUG] Notification types found:', Object.fromEntries(sampleTypes));
-          }
-
-          // جمع المستخدمين المتأثرين قبل الحذف
-           const affectedUsers = new Set<string>();
-           allPostNotifications.forEach(n => affectedUsers.add(n.toUserId.toString()));
-
-          // حذف كل الإشعارات باستخدام نفس الاستعلام
-          const deletedResult = await this.notificationModel.deleteMany(finalDeleteQuery);
-           const totalDeleted = deletedResult.deletedCount;
-
-          console.log(`[NOTIFICATION] Deleted ${totalDeleted} notifications for postId: ${postId}`);
-          console.log(`[NOTIFICATION] Affected users: ${Array.from(affectedUsers)}`);
+          // Get affected users before deletion
+          const affectedNotifications = await this.notificationModel.find(deleteQuery)
+            .select('toUserId')
+            .limit(1000)
+            .lean();
           
-          // التحقق من وجود إشعارات متبقية
-          const remainingNotifications = await this.notificationModel.find(finalDeleteQuery).lean();
-          if (remainingNotifications.length > 0) {
-            console.log(`⚠️ [WARNING] ${remainingNotifications.length} notifications still remain after deletion:`, 
-              remainingNotifications.map(n => ({
-                _id: n._id,
-                type: n.type,
-                data: n.data
-              }))
-            );
-            
-            // محاولة حذف أخيرة بطريقة مختلفة
-            const forceDeleteQuery = {
-              $or: [
-                ...finalDeleteQuery.$or,
-                // محاولة البحث في كامل الـ data object
-                { 'data': { $regex: postId } }
-              ]
-            };
-            
-            const forceDeleteResult = await this.notificationModel.deleteMany(forceDeleteQuery);
-            console.log(`🔥 [FORCE DELETE] Deleted ${forceDeleteResult.deletedCount} additional notifications`);
-          }
+          const affectedUsers = new Set<string>();
+          affectedNotifications.forEach(n => affectedUsers.add(n.toUserId.toString()));
+          
+          // Delete notifications
+          const deletedResult = await this.notificationModel.deleteMany(deleteQuery);
+          const totalDeleted = deletedResult.deletedCount;
 
-          // إرسال حدث الحذف لكل مستخدم متأثر
+          this.logger.log(`Deleted ${totalDeleted} notifications for post: ${postId}`);
+          this.logger.log(`Affected users: ${affectedUsers.size}`);
+          
+          // Send delete events to affected users
           for (const userId of affectedUsers) {
-            console.log(`📡 [DEBUG] Sending delete event to user: ${userId}`);
             this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
               type: 'POST',
               postId: postId,
@@ -1445,7 +689,7 @@ export class NotificationListener {
           }
 
         } catch (err) {
-          this.logger.error('❌ Error deleting notifications for post:', err);
+          this.logger.error('Error deleting notifications for post:', err);
         }
       }
 
@@ -1491,8 +735,8 @@ export class NotificationListener {
           type: NotificationType.USER_MENTIONED,
           content: data.content || 'You were mentioned',
         });
-        this.logger.log('Notification created', notification);
-        console.log('[DEBUG] Created mention notification structure:', JSON.stringify(notification, null, 2));
+        this.debugLog('Notification created', notification);
+        this.debugLog('Created mention notification');
       } else {
         this.logger.log('Mention ignored: self-mention');
       }

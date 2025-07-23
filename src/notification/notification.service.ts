@@ -1,5 +1,5 @@
 // notification.service.ts
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { NotificationDocument } from './entities/notification.schema';
@@ -29,6 +29,8 @@ function extractObjectId(val: any): string {
 
 @Injectable()
 export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+
   constructor(
     @InjectModel('Notification')
     private readonly notificationModel: Model<NotificationDocument>,
@@ -221,7 +223,7 @@ export class NotificationService {
       }
       
       this.gateway.sendNotificationToUser(dto?.toUserId, notification);
-      console.log('we created a notification', notification);
+              this.logger.debug('Notification created successfully');
       return notification;
     }
     

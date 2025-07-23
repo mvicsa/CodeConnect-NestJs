@@ -214,13 +214,12 @@ export class PostsController {
     try {
       const response = await this.postsService.create(body, req.user.sub);
       // Mention notifications
-      console.log('POST TEXT:', response.text);
+      // Process mentions for notifications
       const mentions = extractMentions(String(response.text));
-      console.log('MENTIONS EXTRACTED:', mentions);
       if (mentions.length > 0) {
         const mentionedUsers = await this.usersService.findByUsernames(mentions as string[]);
         for (const user of mentionedUsers) {
-          console.log('WILL EMIT notification.mentioned for:', user.username, (user as any)._id);
+          // Emit mention notification
           if ((user as any)._id.toString() !== req.user.sub) {
             this.client.emit('notification.mentioned', {
               toUserId: (user as any)._id.toString(),

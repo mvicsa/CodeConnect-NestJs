@@ -70,7 +70,7 @@ export class CommentsService {
 
     // Mention notifications
     const mentions = extractMentions(created.text);
-    console.log('MENTIONS IN COMMENT:', mentions);
+    // Process mentions for notifications
     let mentionedUserIds: string[] = [];
     if (mentions.length > 0) {
       const mentionedUsers = await this.usersService.findByUsernames(mentions);
