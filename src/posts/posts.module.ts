@@ -13,6 +13,7 @@ import {
 } from './shemas/code-suggestion.schema';
 import { RabbitMQModule } from 'src/rabbitmq/rabbitmq.module';
 import { UsersModule } from '../users/users.module';
+import { AICommentEvaluation, AICommentEvaluationSchema } from './shemas/code-suggestion.schema';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { UsersModule } from '../users/users.module';
       { name: Post.name, schema: PostSchema },
       { name: Comment.name, schema: CommentSchema },
       { name: CodeSuggestion.name, schema: CodeSuggestionSchema },
+      { name: AICommentEvaluation.name, schema: AICommentEvaluationSchema }, // Register new schema
     ]),
     AiAgentModule,
     UsersModule,

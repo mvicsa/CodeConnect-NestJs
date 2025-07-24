@@ -92,6 +92,10 @@ export class Comment {
   @ApiProperty({ required: false, type: String })
   @Prop()
   updatedAt?: Date;
+
+  @ApiProperty({ required: false, type: Boolean, description: 'Indicates if this comment has an AI evaluation' })
+  @Prop({ default: false })
+  hasAiEvaluation?: boolean;
 }
 
 export const CommentSchema = SchemaFactory.createForClass(Comment);
