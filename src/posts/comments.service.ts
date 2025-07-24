@@ -11,6 +11,9 @@ import { ClientProxy } from '@nestjs/microservices';
 import { NotificationType } from 'src/notification/entities/notification.schema';
 import { PostsService } from './posts.service';
 import { UsersService } from '../users/users.service';
+import { AiAgentService } from '../ai-agent/ai-agent.service';
+import { CommentEvaluationRequestDto } from '../ai-agent/dto/code-help-request.dto';
+import { AICommentEvaluation, AICommentEvaluationSchema } from './shemas/code-suggestion.schema';
 
 function extractObjectId(val: any): string {
   if (!val) return '';
@@ -42,6 +45,8 @@ export class CommentsService {
     @Inject('RABBITMQ_PRODUCER') private readonly client: ClientProxy,
     private readonly postsService: PostsService,
     private readonly usersService: UsersService,
+    private readonly aiAgentService: AiAgentService, // Inject AI agent service
+    @InjectModel(AICommentEvaluation.name) private aiCommentEvalModel: Model<any>, // Inject model for AICommentEvaluation
   ) {}
 
   async create(
@@ -60,6 +65,31 @@ export class CommentsService {
     const post = await this.postsService.findOne(
       data.postId as unknown as string,
     ); // ❌ hacky
+
+    // --- AI Evaluation: Only if both post and comment have code ---
+    if (post && post.code && post.codeLang && created.code && created.codeLang) {
+      try {
+        const evaluation = await this.aiAgentService.evaluateCommentAnswer({
+          postText: post.text || '',
+          postCode: post.code,
+          commentText: created.text || '',
+          commentCode: created.code,
+          language: created.codeLang || post.codeLang,
+        });
+        // Save evaluation in new collection
+        await this.aiCommentEvalModel.create({
+          postId: (post as any)._id,
+          commentId: created._id,
+          evaluation,
+        });
+        // Set hasAiEvaluation to true
+        created.set('hasAiEvaluation', true);
+        await created.save();
+      } catch (err) {
+        // Log error but do not block comment creation
+        console.error('AI evaluation failed:', err.message);
+      }
+    }
 
     let toUserId: string;
     if (post.createdBy && typeof post.createdBy === 'object' && '_id' in post.createdBy) {

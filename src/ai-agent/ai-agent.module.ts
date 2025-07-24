@@ -7,6 +7,6 @@ import { AiAgentService } from './ai-agent.service';
   imports: [ConfigModule],
   controllers: [AiAgentController],
   providers: [AiAgentService],
-  exports: [AiAgentService],
+  exports: [AiAgentService], // Export service for use in other modules
 })
 export class AiAgentModule {}

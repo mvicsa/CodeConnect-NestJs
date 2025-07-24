@@ -40,6 +40,9 @@ import { Request } from 'express';
 import { ClientProxy } from '@nestjs/microservices';
 import { NotificationType } from 'src/notification/entities/notification.schema';
 import { UsersService } from '../users/users.service';
+import { AICommentEvaluation } from './shemas/code-suggestion.schema';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 
 function extractObjectId(val: any): string {
   if (!val) return '';
@@ -72,6 +75,7 @@ export class PostsController {
     private readonly postsService: PostsService,
     @Inject('RABBITMQ_PRODUCER') private readonly client: ClientProxy,
     private readonly usersService: UsersService,
+    @InjectModel(AICommentEvaluation.name) private aiCommentEvalModel: Model<any>,
   ) {}
 
   @Get()

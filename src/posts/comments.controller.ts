@@ -30,9 +30,13 @@ import {
   ApiUnauthorizedResponse,
   ApiConflictResponse,
   ApiInternalServerErrorResponse,
+  ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
 import { NotificationType } from 'src/notification/entities/notification.schema';
+import { AICommentEvaluation } from './shemas/code-suggestion.schema';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 
 @ApiTags('Comments')
 @ApiBearerAuth()
@@ -41,6 +45,7 @@ export class CommentsController {
   constructor(
     private readonly commentsService: CommentsService,
     @Inject('RABBITMQ_PRODUCER') private readonly client: ClientProxy,
+    @InjectModel(AICommentEvaluation.name) private aiCommentEvalModel: Model<any>,
   ) {}
 
   @Post()
@@ -118,6 +123,19 @@ export class CommentsController {
   @ApiResponse({ status: 404, description: 'Comment not found' })
   async findOne(@Param('id') id: string) {
     return this.commentsService.findOne(id);
+  }
+
+  @Get(':id/ai-evaluation')
+  @ApiOperation({ summary: 'Get AI evaluation for a comment' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200, description: 'AI evaluation for the comment' })
+  @ApiNotFoundResponse({ description: 'No AI evaluation available for this comment.' })
+  async getAICommentEvaluation(@Param('id') id: string) {
+    const evaluation = await this.aiCommentEvalModel.findOne({ commentId: id }).lean();
+    if (!evaluation) {
+      return { message: 'No AI evaluation available for this comment.' };
+    }
+    return evaluation;
   }
 
   @Put(':id')
