@@ -41,6 +41,14 @@ export class NotificationService {
   async create(dto: CreateNotificationDto) {
     dto.toUserId = extractObjectId(dto.toUserId);
     dto.fromUserId = extractObjectId(dto.fromUserId);
+    // Always store postId as a string/ObjectId, never as a full object
+    if (dto.data && dto.data.postId) {
+      dto.data.postId = extractObjectId(dto.data.postId);
+    }
+    // Always store commentId as a string/ObjectId, never as a full object
+    if (dto.data && dto.data.commentId) {
+      dto.data.commentId = extractObjectId(dto.data.commentId);
+    }
     // Deduplicate COMMENT_REACTION notifications
     if (dto.type === NotificationType.COMMENT_REACTION && dto.data && dto.data._id) {
       const existing = await this.notificationModel.findOne({
@@ -51,7 +59,16 @@ export class NotificationService {
       });
       if (existing) {
         existing.set('updatedAt', new Date());
-        existing.data = dto.data; // Optionally update data
+        // Merge old and new data, preserve 'post' if not present in new data
+        const newData = { ...existing.data, ...dto.data };
+        if (!dto.data.post && existing.data && existing.data.post) {
+          newData.post = existing.data.post;
+        }
+        // Always normalize postId to string
+        if (newData.postId && typeof newData.postId === 'object' && '_id' in newData.postId) {
+          newData.postId = (newData.postId as any)._id.toString();
+        }
+        existing.data = newData;
         await existing.save();
         // Populate and return as in the new notification case
         const populatedNotification = await this.notificationModel.findById(existing._id)
@@ -112,7 +129,16 @@ export class NotificationService {
       });
       if (existing) {
         existing.set('updatedAt', new Date());
-        existing.data = dto.data; // Optionally update data
+        // Merge old and new data, preserve 'post' if not present in new data
+        const newData = { ...existing.data, ...dto.data };
+        if (!dto.data.post && existing.data && existing.data.post) {
+          newData.post = existing.data.post;
+        }
+        // Always normalize postId to string
+        if (newData.postId && typeof newData.postId === 'object' && '_id' in newData.postId) {
+          newData.postId = (newData.postId as any)._id.toString();
+        }
+        existing.data = newData;
         await existing.save();
         // Populate and return as in the new notification case
         const populatedNotification = await this.notificationModel.findById(existing._id)
@@ -153,6 +179,19 @@ export class NotificationService {
           .lean()
           .exec();
         if (populatedNotification) {
+          // Normalize postId and commentId to string, add post/comment objects
+          if (populatedNotification.data) {
+            if (populatedNotification.data.postId && typeof populatedNotification.data.postId === 'object') {
+              const postData = populatedNotification.data.postId as any;
+              populatedNotification.data.post = postData;
+              populatedNotification.data.postId = postData._id ? postData._id.toString() : '';
+            }
+            if (populatedNotification.data.commentId && typeof populatedNotification.data.commentId === 'object') {
+              const commentData = populatedNotification.data.commentId as any;
+              populatedNotification.data.comment = commentData;
+              populatedNotification.data.commentId = commentData._id ? commentData._id.toString() : '';
+            }
+          }
           this.gateway.sendNotificationToUser(dto?.toUserId, populatedNotification);
           // Emit notification:update for realtime update
           if (this.gateway.server) {
@@ -213,13 +252,13 @@ export class NotificationService {
       if (notification.data && notification.data.postId && typeof notification.data.postId === 'object') {
         const postData = notification.data.postId as any;
         notification.data.post = postData;  // إضافة البيانات كـ post
-        notification.data.postId = postData._id.toString();  // الحفاظ على postId كـ string
+        notification.data.postId = postData._id ? postData._id.toString() : '';  // الحفاظ على postId كـ string
       }
       
       if (notification.data && notification.data.commentId && typeof notification.data.commentId === 'object') {
         const commentData = notification.data.commentId as any;
         notification.data.comment = commentData;  // إضافة البيانات كـ comment
-        notification.data.commentId = commentData._id.toString();  // الحفاظ على commentId كـ string
+        notification.data.commentId = commentData._id ? commentData._id.toString() : '';  // الحفاظ على commentId كـ string
       }
       
       this.gateway.sendNotificationToUser(dto?.toUserId, notification);
@@ -278,14 +317,14 @@ export class NotificationService {
           if (result.data && result.data.postId && typeof result.data.postId === 'object') {
             const postData = result.data.postId as any;
             result.data.post = postData;
-            result.data.postId = postData._id;
+            result.data.postId = postData._id ? postData._id.toString() : '';
           }
           
           // إذا كان هناك commentId وتم populate له، انسخ البيانات إلى data.comment
           if (result.data && result.data.commentId && typeof result.data.commentId === 'object') {
             const commentData = result.data.commentId as any;
             result.data.comment = commentData;
-            result.data.commentId = commentData._id;
+            result.data.commentId = commentData._id ? commentData._id.toString() : '';
           }
           
           return result;
@@ -343,13 +382,13 @@ export class NotificationService {
       if (notification.data && notification.data.postId && typeof notification.data.postId === 'object') {
         const postData = notification.data.postId as any;
         notification.data.post = postData;
-        notification.data.postId = postData._id.toString();  // الحفاظ على postId كـ string
+        notification.data.postId = postData._id ? postData._id.toString() : '';  // الحفاظ على postId كـ string
       }
       
       if (notification.data && notification.data.commentId && typeof notification.data.commentId === 'object') {
         const commentData = notification.data.commentId as any;
         notification.data.comment = commentData;
-        notification.data.commentId = commentData._id.toString();  // الحفاظ على commentId كـ string
+        notification.data.commentId = commentData._id ? commentData._id.toString() : '';  // الحفاظ على commentId كـ string
       }
       
       return notification;
@@ -411,14 +450,14 @@ export class NotificationService {
           if (result.data && result.data.postId && typeof result.data.postId === 'object') {
             const postData = result.data.postId as any;
             result.data.post = postData;
-            result.data.postId = postData._id;
+            result.data.postId = postData._id ? postData._id.toString() : '';
           }
           
           // إذا كان هناك commentId وتم populate له، انسخ البيانات إلى data.comment
           if (result.data && result.data.commentId && typeof result.data.commentId === 'object') {
             const commentData = result.data.commentId as any;
             result.data.comment = commentData;
-            result.data.commentId = commentData._id;
+            result.data.commentId = commentData._id ? commentData._id.toString() : '';
           }
           
           return result;
