@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, Schema as MongooseSchema } from 'mongoose';
@@ -11,6 +12,8 @@ import {
   CodeSuggestion,
   CodeSuggestionDocument,
 } from './shemas/code-suggestion.schema';
+import { Comment, CommentDocument } from './shemas/comment.schema';
+import { AICommentEvaluation } from './shemas/code-suggestion.schema';
 
 @Injectable()
 export class PostsService {
@@ -19,6 +22,8 @@ export class PostsService {
     @InjectModel(CodeSuggestion.name)
     private codeSuggestionModel: Model<CodeSuggestionDocument>,
     private aiAgentService: AiAgentService,
+    @InjectModel(Comment.name) private commentModel: Model<CommentDocument>, // Inject Comment model
+    @InjectModel(AICommentEvaluation.name) private aiCommentEvalModel: Model<any>, // Inject AICommentEvaluation model
   ) {}
 
   async findAll(page = 1, limit = 10): Promise<Post[]> {
@@ -50,7 +55,18 @@ export class PostsService {
     return post;
   }
 
+  private validateTags(tags?: any[]): void {
+    if (tags && Array.isArray(tags)) {
+      for (const tag of tags) {
+        if (typeof tag !== 'string' || tag.length > 15) {
+          throw new BadRequestException('Each tag must be a string with a maximum length of 15 characters.');
+        }
+      }
+    }
+  }
+
   async create(data: Omit<Post, 'createdBy'>, userId: string): Promise<Post> {
+    this.validateTags(data.tags);
     const created = new this.postModel({ ...data, createdBy: userId });
     await created.save();
 
@@ -104,6 +120,7 @@ export class PostsService {
     data: Partial<Post>,
     userId: string,
   ): Promise<Post> {
+    this.validateTags(data.tags);
     const post = await this.postModel.findById(_id);
     if (!post) throw new NotFoundException('Post not found');
     if (post.createdBy.toString() !== userId)
@@ -246,6 +263,112 @@ export class PostsService {
       console.error('Error in getTrendingTags:', error.message, error.stack);
       return [];
     }
+  }
+
+  /**
+   * Finds posts that have code and at least one comment with hasAiEvaluation true (i.e., a 'Great Answer from AI').
+   * Returns paginated results with comments that have aiComment field.
+   */
+  async findArchivePosts(page = 1, limit = 10, search?: string): Promise<Post[]> {
+    // Step 1: Find all postIds that have at least one comment with hasAiEvaluation true and "Good Answer" evaluation
+    const aiCommented = await this.commentModel.aggregate([
+      { $match: { hasAiEvaluation: true } },
+      {
+        $lookup: {
+          from: 'aicommentevaluations',
+          localField: '_id',
+          foreignField: 'commentId',
+          as: 'evaluation'
+        }
+      },
+      { $unwind: '$evaluation' },
+      { $match: { 'evaluation.evaluation': { $regex: /^Good Answer/i } } },
+      { $group: { _id: '$postId' } },
+    ]);
+    const postIds = aiCommented.map((doc) => doc._id);
+    if (!postIds.length) return [];
+
+    // Step 2: Find posts with code and in the above postIds, with optional search
+    const postQuery: any = {
+      _id: { $in: postIds },
+      code: { $exists: true, $ne: null, $regex: /\S/ },
+    };
+
+    // Add search filter if provided
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      postQuery.$or = [
+        { text: searchRegex },
+        { code: searchRegex },
+        { tags: { $in: [searchRegex] } }
+      ];
+    }
+
+    const posts = await this.postModel
+      .find(postQuery)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('createdBy', '-password')
+      .populate({
+        path: 'userReactions.userId',
+        select: '_id firstName lastName avatar role',
+      })
+      .exec();
+
+    // Step 3: For each post, fetch top-level comments and add aiComment field
+    const postsWithComments = await Promise.all(
+      posts.map(async (post) => {
+        // Get top-level comments for this post that have AI evaluation
+        const comments = await this.commentModel
+          .find({ 
+            postId: post._id,
+            parentCommentId: null, // Only top-level comments
+            hasAiEvaluation: true // Only comments with AI evaluation
+          })
+          .populate('createdBy', '-password')
+          .populate({
+            path: 'userReactions.userId',
+            select: '_id firstName lastName avatar role',
+          })
+          .sort({ createdAt: -1 })
+          .exec();
+
+        // Add aiComment field to each comment and filter for "Good Answer" evaluations
+        const commentsWithAiFlag = await Promise.all(comments.map(async (comment) => {
+          const commentObj = comment.toObject() as any;
+          
+          // Add name field to createdBy user data
+          if (commentObj.createdBy && commentObj.createdBy.firstName && commentObj.createdBy.lastName) {
+            commentObj.createdBy.name = `${commentObj.createdBy.firstName} ${commentObj.createdBy.lastName}`;
+          }
+          
+          // Fetch the AI evaluation data
+          const aiEvaluation = await this.aiCommentEvalModel.findOne({ 
+            commentId: comment._id 
+          }).lean();
+          
+          // Only include comments with "Good Answer" evaluation (must start with "Good Answer")
+          if (aiEvaluation && (aiEvaluation as any).evaluation && /^Good Answer/i.test((aiEvaluation as any).evaluation)) {
+            commentObj.aiComment = aiEvaluation;
+            return commentObj;
+          } else {
+            return null; // Filter out comments that don't have "Good Answer" evaluation
+          }
+        }));
+
+        // Filter out null comments (those without "Good Answer" evaluation)
+        const filteredComments = commentsWithAiFlag.filter(comment => comment !== null);
+
+        // Attach comments to the post object
+        const postWithComments = post.toObject() as any;
+        postWithComments.comments = filteredComments;
+        
+        return postWithComments;
+      })
+    );
+
+    return postsWithComments;
   }
 } 
 
