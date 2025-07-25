@@ -9,6 +9,8 @@ import { NotificationController } from './notification.controller';
 import { Notification } from './entities/notification.schema';
 import { User } from 'src/users/shemas/user.schema';
 import { UsersModule } from 'src/users/users.module';
+import { Comment, CommentSchema } from '../posts/shemas/comment.schema';
+import { PostsModule } from '../posts/posts.module';
 
 @Module({
   imports: [
@@ -18,7 +20,9 @@ import { UsersModule } from 'src/users/users.module';
         name: Notification.name,
         schema: NotificationSchema,
       },
+      { name: Comment.name, schema: CommentSchema },
     ]),
+    PostsModule,
     UsersModule,
   ],
   controllers: [NotificationListener, NotificationController], // Explicitly declare NotificationListener as a controller The @Controller() decorator marks a class as a controller, which can handle HTTP routes or microservice events (with @EventPattern or @MessagePattern).

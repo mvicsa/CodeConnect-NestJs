@@ -18,6 +18,7 @@ import { NotificationService } from './notification.service';
 import { NotificationGateway } from './notification.gateway';
 import { UsersService } from '../users/users.service';
 import { ConfigService } from '@nestjs/config';
+import { Comment } from '../posts/shemas/comment.schema';
 
 function extractUserId(val: any): string {
   if (!val) return '';
@@ -102,6 +103,8 @@ export class NotificationListener {
     private readonly gateway: NotificationGateway,
     private readonly userService: UsersService,
     private readonly configService: ConfigService,
+    @InjectModel('Comment')
+    private readonly commentModel: Model<Comment>,
   ) {
     // Only enable debug logging in development
     this.isDebugMode = this.configService.get('NODE_ENV') === 'development';
@@ -569,19 +572,18 @@ export class NotificationListener {
         const postId = typeof data.postId === 'object' && data.postId._id
           ? data.postId._id.toString()
           : data.postId.toString();
-        
+        // Remove all previous reaction notifications for this user and post, regardless of reaction type
         const deletedNotifications = await this.notificationModel.deleteMany({
           toUserId: data.toUserId,
           fromUserId: data.fromUserId,
           type: 'POST_REACTION',
           'data.postId': postId,
         });
-
         this.logger.log(`Deleted ${deletedNotifications.deletedCount} post reaction notifications`);
-
         this.gateway.server.to(`user:${data.toUserId}`).emit('notification:delete', {
           type: 'POST_REACTION',
           postId: postId,
+          fromUserId: data.fromUserId,
         });
       }
       else if (data.type === 'FOLLOWED_USER' && data.followId) {
@@ -649,47 +651,65 @@ export class NotificationListener {
       }
       else if (data.type === 'POST' && data.postId) {
         this.debugLog('Deleting POST notifications', { postId: data.postId });
-        
-        const postId = typeof data.postId === 'object' && data.postId._id
+        const postIdStr = typeof data.postId === 'object' && data.postId._id
           ? data.postId._id.toString()
           : data.postId.toString();
-        
-        try {
-          const deleteQuery = {
+        const deleteQuery = {
+          $or: [
+            { 'data.postId': postIdStr },
+            { 'data.postId._id': postIdStr },
+            { 'data._id': postIdStr },
+            { 'data.post._id': postIdStr },
+          ]
+        };
+        // Get affected users before deletion
+        const affectedNotifications = await this.notificationModel.find(deleteQuery)
+          .select('toUserId')
+          .limit(1000)
+          .lean();
+        const affectedUsers = new Set<string>();
+        affectedNotifications.forEach(n => affectedUsers.add(n.toUserId.toString()));
+        // Delete notifications
+        const deletedResult = await this.notificationModel.deleteMany(deleteQuery);
+        const totalDeleted = deletedResult.deletedCount;
+        this.logger.log(`Deleted ${totalDeleted} notifications for post: ${postIdStr}`);
+        this.logger.log(`Affected users: ${affectedUsers.size}`);
+        // Send delete events to affected users
+        for (const userId of affectedUsers) {
+          this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
+            type: 'POST',
+            postId: postIdStr,
+            affectedTypes: ['POST_CREATED', 'POST_REACTION', 'COMMENT_ADDED', 'COMMENT_REACTION', 'USER_MENTIONED']
+          });
+        }
+        // Also delete COMMENT_REACTION and COMMENT_ADDED notifications for comments/replies on this post
+        const commentRelatedQuery = {
+          $or: [
+            { 'data.postId': postIdStr },
+            { 'data.postId._id': postIdStr },
+            { 'data.post._id': postIdStr },
+          ],
+          type: { $in: ['COMMENT_REACTION', 'COMMENT_ADDED'] }
+        };
+        const deletedCommentRelated = await this.notificationModel.deleteMany(commentRelatedQuery);
+        this.logger.log(`Deleted ${deletedCommentRelated.deletedCount} comment/reply notifications for post: ${postIdStr}`);
+        // Get all comment IDs for this post from the comments collection
+        const commentDocs = await this.commentModel.find({ postId: postIdStr }).select('_id').lean();
+        const commentIds = commentDocs.map(c => c._id.toString());
+        // Delete notifications for these commentIds
+        if (commentIds.length > 0) {
+          const commentReactionDeleteQuery = {
             $or: [
-              { 'data.postId': postId },
-              { 'data._id': postId },
-              { 'data.post._id': postId },
-            ]
+              { 'data.commentId': { $in: commentIds } },
+              { 'data._id': { $in: commentIds } },
+              { 'data.comment._id': { $in: commentIds } },
+              { 'data.parentCommentId': { $in: commentIds } },
+              { 'data.comment.parentCommentId': { $in: commentIds } },
+            ],
+            type: 'COMMENT_REACTION'
           };
-          
-          // Get affected users before deletion
-          const affectedNotifications = await this.notificationModel.find(deleteQuery)
-            .select('toUserId')
-            .limit(1000)
-            .lean();
-          
-          const affectedUsers = new Set<string>();
-          affectedNotifications.forEach(n => affectedUsers.add(n.toUserId.toString()));
-          
-          // Delete notifications
-          const deletedResult = await this.notificationModel.deleteMany(deleteQuery);
-          const totalDeleted = deletedResult.deletedCount;
-
-          this.logger.log(`Deleted ${totalDeleted} notifications for post: ${postId}`);
-          this.logger.log(`Affected users: ${affectedUsers.size}`);
-          
-          // Send delete events to affected users
-          for (const userId of affectedUsers) {
-            this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
-              type: 'POST',
-              postId: postId,
-              affectedTypes: ['POST_CREATED', 'POST_REACTION', 'COMMENT_ADDED', 'COMMENT_REACTION', 'USER_MENTIONED']
-            });
-          }
-
-        } catch (err) {
-          this.logger.error('Error deleting notifications for post:', err);
+          const deletedCommentReactions = await this.notificationModel.deleteMany(commentReactionDeleteQuery);
+          this.logger.log(`Deleted ${deletedCommentReactions.deletedCount} COMMENT_REACTION notifications for comments/replies on post: ${postIdStr}`);
         }
       }
 
