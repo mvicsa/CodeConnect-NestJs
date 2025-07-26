@@ -1,346 +1,252 @@
-# CodeConnect Notification System
+# CodeConnect Backend 🚀
 
-A real-time notification system built with NestJS, Socket.IO, and RabbitMQ for seamless user engagement and communication.
+A powerful, feature-rich backend API for CodeConnect - a collaborative coding platform built with **NestJS**, **MongoDB**, and **Socket.IO**. This platform enables developers to connect, collaborate, and learn through real-time communication, AI-powered code assistance, and interactive coding sessions.
 
-## 🚀 Features
+## ✨ Features
 
-- **Real-time Notifications**: Instant WebSocket-based notifications
-- **Multiple Notification Types**: Posts, reactions, comments, follows, mentions
-- **Scalable Architecture**: Microservices pattern with RabbitMQ
-- **User Following System**: Notify followers of user activities
-- **Mention System**: Tag users in posts and comments
-- **Message Notifications**: Real-time chat notifications
-- **Notification Management**: Mark as read, delete old notifications
+### 🔐 Authentication & Authorization
+- **JWT-based Authentication** with secure token management
+- **GitHub OAuth Integration** for seamless social login
+- **Password Reset** functionality with email verification
+- **Role-based Access Control** for different user types
 
-## 📋 Notification Types
+### 💬 Real-time Communication
+- **WebSocket-powered Chat System** with Socket.IO
+- **Real-time Notifications** for posts, comments, reactions, and mentions
+- **Live Video/Audio Calls** integration with LiveKit
+- **File Upload & Sharing** in chat conversations
 
-| Type | Description | Trigger |
-|------|-------------|---------|
-| `POST_CREATED` | New post by followed user | User creates post |
-| `POST_REACTION` | Reaction on user's post | Someone reacts to post |
-| `COMMENT_ADDED` | Comment on user's post | Someone comments on post |
-| `COMMENT_REACTION` | Reaction on user's comment | Someone reacts to comment |
-| `FOLLOWED_USER` | New follower | Someone follows user |
-| `MESSAGE_RECEIVED` | New message | Someone sends message |
-| `USER_MENTIONED` | User mentioned in post/comment | User tagged with @ |
+### 🤖 AI-Powered Features
+- **Code Analysis & Suggestions** using OpenAI GPT models
+- **Comment Evaluation System** - AI automatically evaluates code answers
+- **Smart Code Help** - Get guidance without complete solutions
+- **Archive System** - Curated posts with verified AI answers
+
+### 📝 Content Management
+- **Posts & Comments System** with rich text and code support
+- **Code Snippets** with syntax highlighting and language detection
+- **Reactions & Interactions** (likes, reactions, etc.)
+- **Search Functionality** across posts, users, and content
+- **Tagging System** for better content organization
+
+### 👥 Social Features
+- **User Profiles** with customizable avatars and information
+- **Follow/Unfollow System** for building connections
+- **User Blocking** functionality for content moderation
+- **Mention System** (@username) in posts and comments
+- **Activity Feed** with personalized content
+
+### 🔍 Advanced Features
+- **Microservices Architecture** with RabbitMQ message queuing
+- **Real-time Search** with instant results
+- **Notification Management** (mark as read, delete, preferences)
+- **Sparks System** for gamification and engagement
+- **Group Management** for team collaboration
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend       │    │   RabbitMQ      │
-│   (NextJS)   │◄──►│   (NestJS)      │◄──►│   (Message      │
-│                 │    │                 │    │    Broker)      │
+│   Frontend      │    │   Backend       │    │   External      │
+│   (NextJS)      │◄──►│   (NestJS)      │◄──►│   Services      │
+│                 │    │                 │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                               │
                               ▼
                        ┌─────────────────┐
-                       │   MongoDB       │
-                       │   (Database)    │
+                       │   Database      │
+                       │   (MongoDB)     │
+                       └─────────────────┘
+                              │
+                              ▼
+                       ┌─────────────────┐
+                       │   Message       │
+                       │   Queue         │
+                       │   (RabbitMQ)    │
                        └─────────────────┘
 ```
 
-## 🛠️ Technology Stack
+## 🛠️ Tech Stack
 
-- **Backend**: NestJS, TypeScript
-- **Database**: MongoDB with Mongoose
-- **Message Broker**: RabbitMQ
-- **Real-time**: Socket.IO
-- **Authentication**: JWT, GitHub OAuth
-- **API Documentation**: Swagger/OpenAPI
+### Core Framework
+- **NestJS** - Progressive Node.js framework
+- **TypeScript** - Type-safe JavaScript
+- **MongoDB** - NoSQL database with Mongoose ODM
+- **Socket.IO** - Real-time bidirectional communication
 
-## 📦 Installation
+### Authentication & Security
+- **Passport.js** - Authentication middleware
+- **JWT** - JSON Web Tokens for stateless authentication
+- **bcrypt** - Password hashing
+- **GitHub OAuth** - Social authentication
+
+### AI & External Services
+- **OpenAI API** - GPT models for code analysis
+- **LiveKit** - Real-time video/audio communication
+- **AWS SDK** - Cloud services integration
+
+### Message Queuing & Microservices
+- **RabbitMQ** - Message broker for microservices
+- **AMQP** - Advanced Message Queuing Protocol
+
+### Development Tools
+- **Swagger/OpenAPI** - API documentation
+- **Jest** - Testing framework
+- **ESLint & Prettier** - Code quality and formatting
+
+## 🚀 Quick Start
 
 ### Prerequisites
-
-- Node.js (v16 or higher)
-- MongoDB
-- RabbitMQ
+- Node.js (v18 or higher)
+- MongoDB (v5 or higher)
+- RabbitMQ (v3.8 or higher)
 - Git
 
-### Setup
+### Installation
 
 1. **Clone the repository**
-```bash
-git clone <repository-url>
-cd CodeConnect-NestJs
-```
+   ```bash
+   git clone https://github.com/your-username/CodeConnect-NestJs.git
+   cd CodeConnect-NestJs
+   ```
 
 2. **Install dependencies**
-```bash
-npm install
-```
+   ```bash
+   npm install
+   ```
 
-3. **Environment Configuration**
-```bash
-cp env.example .env
-```
+3. **Environment Setup**
+   ```bash
+   cp env.example .env
+   ```
+   
+   Configure your `.env` file with the required environment variables (see [Environment Variables](#environment-variables) section).
 
-Configure your `.env` file:
+4. **Start the application**
+   ```bash
+   # Development mode
+   npm run start:dev
+   
+   # Production mode
+   npm run build
+   npm run start:prod
+   ```
+
+5. **Access the API**
+   - API Base URL: `http://localhost:5000`
+   - Swagger Documentation: `http://localhost:5000/api`
+
+## 🔧 Environment Variables
+
+Create a `.env` file in the root directory with the following variables:
+
 ```env
-# Database
-MONGODB_URI=mongodb://localhost:27017/codeconnect
+# MongoDB Connection
+MONGO_URI=mongodb://localhost:27017/codeconnect
 
-# RabbitMQ
-AMQP_URL=amqp://localhost:5672
-RMQ_QUEUE=notifications_queue
-RMQ_PREFETCH_COUNT=10
-RMQ_RETRY_ATTEMPTS=3
-RMQ_RETRY_DELAY=5000
-RMQ_HEARTBEAT=60
-RMQ_CONNECTION_TIMEOUT=30000
-
-# JWT
-JWT_SECRET=your-jwt-secret
-JWT_EXPIRES_IN=7d
+# JWT Authentication
+JWT_SECRET=your_jwt_secret_key
+JWT_EXPIRATION=1d
 
 # GitHub OAuth
-GITHUB_CLIENT_ID=your-github-client-id
-GITHUB_CLIENT_SECRET=your-github-client-secret
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
 GITHUB_CALLBACK_URL=http://localhost:3000/auth/github/callback
 
-# Server
-PORT=3000
-NODE_ENV=development
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-4o
+OPENAI_TEMPERATURE=0.7
+OPENAI_MAX_TOKENS=500
+
+# LiveKit Configuration
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
+LIVEKIT_URL=wss://your-livekit-server.com
+
+# RabbitMQ Configuration
+AMQP_URL=amqp://localhost:5672
+RMQ_QUEUE=notifications_queue
+
+# SMTP Configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_app_password
+
+# Frontend URL
+FRONTEND_URL=http://localhost:3000
 ```
 
-4. **Start RabbitMQ**
-```bash
-# Using Docker
-docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:management
+## 📚 API Documentation
 
-# Or install locally
-# Follow RabbitMQ installation guide for your OS
-```
-
-5. **Start MongoDB**
-```bash
-# Using Docker
-docker run -d --name mongodb -p 27017:27017 mongo:latest
-
-# Or install locally
-# Follow MongoDB installation guide for your OS
-```
-
-6. **Run the application**
-```bash
-# Development
-npm run start:dev
-
-# Production
-npm run build
-npm run start:prod
-```
-
-## 🔧 API Endpoints
-
-### Authentication
+### Authentication Endpoints
 ```http
-POST /auth/login
-POST /auth/register
-GET /auth/github
-GET /auth/github/callback
+POST /auth/register - User registration
+POST /auth/login - User login
+POST /auth/github - GitHub OAuth login
+POST /auth/forgot-password - Request password reset
+POST /auth/reset-password - Reset password
 ```
 
-### Notifications
+### User Management
 ```http
-GET /notifications - Get user notifications
-PUT /notifications/:id/read - Mark notification as read
-DELETE /notifications/:id - Delete notification
+GET /users/profile - Get user profile
+PUT /users/profile - Update user profile
+GET /users/:id - Get user by ID
+POST /users/follow/:id - Follow user
+DELETE /users/follow/:id - Unfollow user
 ```
 
-### Posts
+### Posts & Content
 ```http
 GET /posts - Get all posts
 POST /posts - Create new post
 GET /posts/:id - Get specific post
 PUT /posts/:id - Update post
 DELETE /posts/:id - Delete post
-POST /posts/:id/reactions - Add reaction to post
+GET /posts/:id/comments - Get post comments
+POST /posts/:id/comments - Add comment
 ```
 
-### Users
+### AI Features
 ```http
-GET /users - Get all users
-GET /users/:id - Get specific user
-PUT /users/:id - Update user
-POST /users/:id/follow - Follow user
-DELETE /users/:id/follow - Unfollow user
-GET /users/:id/followers - Get user followers
-GET /users/:id/following - Get user following
+POST /ai-agent/code-help - Get code suggestions
+POST /ai-agent/evaluate-comment-answer - Evaluate comment quality
+GET /posts/:id/code-suggestions - Get AI suggestions for post
 ```
 
-## 🔌 WebSocket Events
-
-### Client to Server
-```javascript
-// Join user's notification room
-socket.emit('join', userId);
-
-// Leave room
-socket.emit('leave', userId);
+### Real-time Features
+```http
+GET /chat/rooms - Get chat rooms
+POST /chat/rooms - Create chat room
+GET /chat/rooms/:id/messages - Get room messages
+POST /chat/rooms/:id/messages - Send message
 ```
 
-### Server to Client
-```javascript
-// Listen for notifications
-socket.on('notification', (notification) => {
-  console.log('New notification:', notification);
-});
-
-// Listen for notification updates
-socket.on('notification:update', (notification) => {
-  console.log('Notification updated:', notification);
-});
-```
-
-## 📱 Frontend Integration
-
-### Socket.IO Connection
-```javascript
-import io from 'socket.io-client';
-
-const notificationSocket = io('http://localhost:3000', {
-  transports: ['websocket'],
-  autoConnect: true
-});
-
-// Connect and join user room
-notificationSocket.on('connect', () => {
-  const userId = user?._id;
-  if (userId) {
-    notificationSocket.emit('join', userId);
-  }
-});
-
-// Listen for notifications
-notificationSocket.on('notification', (notification) => {
-  // Update UI with new notification
-  updateNotifications(notification);
-});
-```
-
-### API Integration
-```javascript
-// Fetch notifications
-const fetchNotifications = async () => {
-  const response = await fetch('/api/notifications', {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  });
-  return response.json();
-};
-
-// Mark as read
-const markAsRead = async (notificationId) => {
-  await fetch(`/api/notifications/${notificationId}/read`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  });
-};
-```
-
-## 🔄 Notification Flow
-
-### Post Creation Flow
-```mermaid
-sequenceDiagram
-    participant F as Frontend
-    participant B as Backend
-    participant R as RabbitMQ
-    participant N as Notification Service
-    participant W as WebSocket
-
-    F->>B: POST /posts
-    B->>B: Create post
-    B->>R: Emit post.created event
-    R->>N: Consume post.created event
-    N->>N: Get user followers
-    N->>N: Create notifications for followers
-    N->>W: Send notifications via WebSocket
-    W->>F: Emit notification event
-```
-
-### Notification Data Structure
-```typescript
-interface Notification {
-  _id: string;
-  toUserId: string;
-  fromUserId: string;
-  type: NotificationType;
-  content: string;
-  data?: {
-    postId?: string;
-    commentId?: string;
-    post?: Post;
-    comment?: Comment;
-  };
-  isRead: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
+### LiveKit Integration
+```http
+POST /livekit/create-room - Create video call room
+GET /livekit/room/:id/token - Get room access token
+DELETE /livekit/room/:id - Delete room
 ```
 
 ## 🧪 Testing
 
-### Unit Tests
 ```bash
+# Unit tests
 npm run test
-```
 
-### E2E Tests
-```bash
+# e2e tests
 npm run test:e2e
+
+# Test coverage
+npm run test:cov
 ```
 
-### Manual Testing
-```bash
-# Test notification system
-npm run start:dev
+## 🐳 Docker Deployment
 
-# Create a post and check notifications
-curl -X POST http://localhost:3000/posts \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Test post", "code": "console.log(\"Hello\")"}'
-```
-
-## 📊 Monitoring
-
-### Logs
-The system provides detailed logging for debugging:
-```bash
-# View application logs
-npm run start:dev
-
-# Check RabbitMQ logs
-docker logs rabbitmq
-
-# Check MongoDB logs
-docker logs mongodb
-```
-
-### Health Checks
-```http
-GET /health - Application health
-GET /health/rabbitmq - RabbitMQ connection status
-GET /health/mongodb - MongoDB connection status
-```
-
-## 🔒 Security
-
-- **JWT Authentication**: Secure token-based authentication
-- **GitHub OAuth**: Social login integration
-- **Input Validation**: Request validation using DTOs
-- **Rate Limiting**: API rate limiting protection
-- **CORS**: Cross-origin resource sharing configuration
-
-## 🚀 Deployment
-
-### Docker
+### Dockerfile
 ```dockerfile
 FROM node:18-alpine
 
@@ -352,27 +258,80 @@ RUN npm ci --only=production
 COPY . .
 RUN npm run build
 
-EXPOSE 3000
+EXPOSE 5000
 
 CMD ["npm", "run", "start:prod"]
 ```
 
-### Environment Variables
-```env
-# Production
-NODE_ENV=production
-PORT=3000
-MONGODB_URI=mongodb://production-db:27017/codeconnect
-AMQP_URL=amqp://production-rabbitmq:5672
+### Docker Compose
+```yaml
+version: '3.8'
+services:
+  backend:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/codeconnect
+      - AMQP_URL=amqp://rabbitmq:5672
+    depends_on:
+      - mongo
+      - rabbitmq
+
+  mongo:
+    image: mongo:5
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+volumes:
+  mongo_data:
+  rabbitmq_data:
 ```
+
+## 🔒 Security Features
+
+- **JWT Token Authentication** with secure token management
+- **Input Validation** using class-validator and DTOs
+- **CORS Configuration** for cross-origin requests
+- **Rate Limiting** to prevent abuse
+- **Password Hashing** with bcrypt
+- **Environment Variable Protection** for sensitive data
+
+## 📊 Performance Optimizations
+
+- **Database Indexing** for faster queries
+- **Connection Pooling** for MongoDB
+- **Message Queuing** for async operations
+- **Caching Strategies** for frequently accessed data
+- **Compression** for API responses
+- **Memory Management** with proper garbage collection
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+We welcome contributions! Please follow these steps:
+
+1. **Fork the repository**
+2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
+3. **Commit your changes** (`git commit -m 'Add amazing feature'`)
+4. **Push to the branch** (`git push origin feature/amazing-feature`)
+5. **Open a Pull Request**
+
+### Development Guidelines
+- Follow TypeScript best practices
+- Write unit tests for new features
+- Update API documentation
+- Follow the existing code style
+- Add proper error handling
 
 ## 📝 License
 
@@ -380,17 +339,44 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🆘 Support
 
-- **Documentation**: [API Documentation](docs/api.md)
+- **Documentation**: [API Documentation](http://localhost:5000/api)
 - **Issues**: [GitHub Issues](https://github.com/your-repo/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/your-repo/discussions)
+- **Email**: support@codeconnect.com
 
 ## 🙏 Acknowledgments
 
-- NestJS team for the amazing framework
-- Socket.IO for real-time communication
-- RabbitMQ for message queuing
-- MongoDB for flexible data storage
+- **NestJS Team** for the amazing framework
+- **Socket.IO** for real-time communication
+- **OpenAI** for AI-powered features
+- **LiveKit** for video/audio capabilities
+- **MongoDB** for flexible data storage
+- **RabbitMQ** for message queuing
+
+## 📈 Roadmap
+
+- [ ] **Advanced AI Features**
+  - Code review automation
+  - Pair programming AI assistant
+  - Code quality scoring
+
+- [ ] **Enhanced Collaboration**
+  - Real-time code editing
+  - Collaborative debugging sessions
+  - Team workspaces
+
+- [ ] **Performance Improvements**
+  - Redis caching layer
+  - CDN integration
+  - Database optimization
+
+- [ ] **Mobile Support**
+  - React Native app
+  - Push notifications
+  - Offline capabilities
 
 ---
 
-**Made with ❤️ by the CodeConnect team**
+**Made with ❤️ by the CodeConnect Team**
+
+*Connect, Collaborate, Code Together!*
