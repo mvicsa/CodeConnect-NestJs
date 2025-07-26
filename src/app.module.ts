@@ -14,6 +14,7 @@ import { LivekitModule } from './livekit/livekit.module';
 import { NotificationModule } from './notification/notification.module';
 import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { SearchModule } from './search/search.module';
+import { SparksModule } from './sparks/sparks.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SearchModule } from './search/search.module';
     NotificationModule,
     RabbitMQModule,
     SearchModule,
+    SparksModule
   ],
   controllers: [AppController],
   providers: [AppService],
