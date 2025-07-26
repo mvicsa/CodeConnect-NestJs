@@ -12,6 +12,8 @@ import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GitHubAuthGuard } from './guards/github-auth.guard';
 import {
@@ -75,6 +77,36 @@ export class AuthController {
       return response;
     } catch (error) {
       if (error.status === 400 || error.status === 401) {
+        throw error;
+      }
+      throw new Error('Internal server error');
+    }
+  }
+
+  @Post('forgot-password')
+  @ApiOkResponse({ description: 'Password reset email sent' })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    try {
+      return await this.authService.forgotPassword(forgotPasswordDto);
+    } catch (error) {
+      if (error.status === 400) {
+        throw error;
+      }
+      throw new Error('Internal server error');
+    }
+  }
+
+  @Post('reset-password')
+  @ApiOkResponse({ description: 'Password reset successfully' })
+  @ApiBadRequestResponse({ description: 'Invalid or expired token' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    try {
+      return await this.authService.resetPassword(resetPasswordDto);
+    } catch (error) {
+      if (error.status === 400) {
         throw error;
       }
       throw new Error('Internal server error');
