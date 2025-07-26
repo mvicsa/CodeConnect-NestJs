@@ -40,7 +40,9 @@ export class AuthController {
 
   @Post('register')
   @ApiCreatedResponse({ description: 'User successfully registered' })
-  @ApiBadRequestResponse({ description: 'Validation failed or email/username exists' })
+  @ApiBadRequestResponse({
+    description: 'Validation failed or email/username exists',
+  })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async register(@Body() registerDto: RegisterDto) {
     try {

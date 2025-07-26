@@ -13,18 +13,24 @@ import { PostsService } from './posts.service';
 import { UsersService } from '../users/users.service';
 import { AiAgentService } from '../ai-agent/ai-agent.service';
 import { CommentEvaluationRequestDto } from '../ai-agent/dto/code-help-request.dto';
-import { AICommentEvaluation, AICommentEvaluationSchema } from './shemas/code-suggestion.schema';
+import {
+  AICommentEvaluation,
+  AICommentEvaluationSchema,
+} from './shemas/code-suggestion.schema';
 
 function extractObjectId(val: any): string {
   if (!val) return '';
   if (typeof val === 'string') {
     // Match new ObjectId('...') or _id: '...'
-    const match = val.match(/_id: new ObjectId\('([a-fA-F0-9]{24})'\)/) || val.match(/_id: '([a-fA-F0-9]{24})'/);
+    const match =
+      val.match(/_id: new ObjectId\('([a-fA-F0-9]{24})'\)/) ||
+      val.match(/_id: '([a-fA-F0-9]{24})'/);
     if (match) return match[1];
     if (/^[a-fA-F0-9]{24}$/.test(val.trim())) return val.trim();
     try {
       const parsed = JSON.parse(val);
-      if (parsed && typeof parsed === 'object' && parsed._id) return parsed._id.toString();
+      if (parsed && typeof parsed === 'object' && parsed._id)
+        return parsed._id.toString();
     } catch {
       return val;
     }
@@ -35,7 +41,9 @@ function extractObjectId(val: any): string {
 
 function extractMentions(text: string): string[] {
   if (!text) return [];
-  return Array.from(new Set((text.match(/@([a-zA-Z0-9_]+)/g) || []).map(m => m.slice(1))));
+  return Array.from(
+    new Set((text.match(/@([a-zA-Z0-9_]+)/g) || []).map((m) => m.slice(1))),
+  );
 }
 
 @Injectable()
@@ -46,7 +54,8 @@ export class CommentsService {
     private readonly postsService: PostsService,
     private readonly usersService: UsersService,
     private readonly aiAgentService: AiAgentService, // Inject AI agent service
-    @InjectModel(AICommentEvaluation.name) private aiCommentEvalModel: Model<any>, // Inject model for AICommentEvaluation
+    @InjectModel(AICommentEvaluation.name)
+    private aiCommentEvalModel: Model<any>, // Inject model for AICommentEvaluation
   ) {}
 
   async create(
@@ -67,7 +76,13 @@ export class CommentsService {
     ); // ❌ hacky
 
     // --- AI Evaluation: Only if both post and comment have code ---
-    if (post && post.code && post.codeLang && created.code && created.codeLang) {
+    if (
+      post &&
+      post.code &&
+      post.codeLang &&
+      created.code &&
+      created.codeLang
+    ) {
       try {
         const evaluation = await this.aiAgentService.evaluateCommentAnswer({
           postText: post.text || '',
@@ -92,7 +107,11 @@ export class CommentsService {
     }
 
     let toUserId: string;
-    if (post.createdBy && typeof post.createdBy === 'object' && '_id' in post.createdBy) {
+    if (
+      post.createdBy &&
+      typeof post.createdBy === 'object' &&
+      '_id' in post.createdBy
+    ) {
       toUserId = (post.createdBy as any)._id.toString();
     } else {
       toUserId = post.createdBy.toString();
@@ -120,10 +139,15 @@ export class CommentsService {
 
     // If this is a reply, notify parent comment owner (if not self and not mentioned)
     if (created.parentCommentId) {
-      const parentComment = await this.commentModel.findById(created.parentCommentId);
+      const parentComment = await this.commentModel.findById(
+        created.parentCommentId,
+      );
       if (parentComment) {
         const parentOwnerId = parentComment.createdBy.toString();
-        if (parentOwnerId !== userId && !mentionedUserIds.includes(parentOwnerId)) {
+        if (
+          parentOwnerId !== userId &&
+          !mentionedUserIds.includes(parentOwnerId)
+        ) {
           this.client.emit('comment.added', {
             toUserId: parentOwnerId,
             fromUserId: userId,
@@ -212,7 +236,12 @@ export class CommentsService {
 
     // Handle mentions if text was updated
     if (data.text !== undefined) {
-      await this.handleMentionUpdates(comment, oldMentions, newMentions, userId);
+      await this.handleMentionUpdates(
+        comment,
+        oldMentions,
+        newMentions,
+        userId,
+      );
     }
 
     return comment;
@@ -225,31 +254,39 @@ export class CommentsService {
     userId: string,
   ): Promise<void> {
     // Find mentions that were removed
-    const removedMentions = oldMentions.filter(mention => !newMentions.includes(mention));
-    
+    const removedMentions = oldMentions.filter(
+      (mention) => !newMentions.includes(mention),
+    );
+
     // Find mentions that were added
-    const addedMentions = newMentions.filter(mention => !oldMentions.includes(mention));
+    const addedMentions = newMentions.filter(
+      (mention) => !oldMentions.includes(mention),
+    );
 
     console.log('COMMENT MENTION UPDATE:', {
       commentId: (comment as any)._id,
       oldMentions,
       newMentions,
       removedMentions,
-      addedMentions
+      addedMentions,
     });
 
     // Handle removed mentions - delete their notifications
     if (removedMentions.length > 0) {
       try {
-        const removedUsers = await this.usersService.findByUsernames(removedMentions);
+        const removedUsers =
+          await this.usersService.findByUsernames(removedMentions);
         for (const user of removedUsers) {
-          console.log('Deleting comment mention notification for removed user:', (user as any).username);
+          console.log(
+            'Deleting comment mention notification for removed user:',
+            (user as any).username,
+          );
           this.client.emit('notification.source.deleted', {
             type: 'USER_MENTIONED',
             toUserId: (user as any)._id.toString(),
             fromUserId: userId,
             commentId: (comment as any)._id.toString(),
-            data: { commentId: (comment as any)._id.toString() }
+            data: { commentId: (comment as any)._id.toString() },
           });
         }
       } catch (error) {
@@ -260,10 +297,14 @@ export class CommentsService {
     // Handle added mentions - create new notifications
     if (addedMentions.length > 0) {
       try {
-        const addedUsers = await this.usersService.findByUsernames(addedMentions);
+        const addedUsers =
+          await this.usersService.findByUsernames(addedMentions);
         for (const user of addedUsers) {
           if ((user as any)._id.toString() !== userId) {
-            console.log('Creating comment mention notification for new user:', (user as any).username);
+            console.log(
+              'Creating comment mention notification for new user:',
+              (user as any).username,
+            );
             this.client.emit('notification.mentioned', {
               toUserId: (user as any)._id.toString(),
               fromUserId: userId,
@@ -284,44 +325,50 @@ export class CommentsService {
     if (!comment) throw new NotFoundException('Comment not found');
     if (comment.createdBy.toString() !== userId)
       throw new ForbiddenException('You can only delete your own comments');
-    
+
     // Save comment data before deletion for notifications
     const commentId = String(comment._id);
     const commentData = comment.toObject();
-    
+
     // 🔥 البحث عن جميع الردود المرتبطة بهذا التعليق قبل حذفها
-    const replies = await this.commentModel.find({ parentCommentId: _id }).lean();
-    console.log(`[DEBUG] Found ${replies.length} replies to delete with comment ${commentId}`);
-    
+    const replies = await this.commentModel
+      .find({ parentCommentId: _id })
+      .lean();
+    console.log(
+      `[DEBUG] Found ${replies.length} replies to delete with comment ${commentId}`,
+    );
+
     // حذف إشعارات التفاعلات للردود قبل حذف الردود نفسها
     if (replies.length > 0) {
       for (const reply of replies) {
         const replyId = String(reply._id);
-        console.log(`[DEBUG] Deleting reaction notifications for reply: ${replyId}`);
-        
+        console.log(
+          `[DEBUG] Deleting reaction notifications for reply: ${replyId}`,
+        );
+
         // إرسال حدث لحذف إشعارات التفاعلات على هذا الرد
         this.client.emit('notification.source.deleted', {
           type: 'COMMENT_REACTION',
           commentId: replyId,
           isReply: true,
-          parentCommentId: commentId
+          parentCommentId: commentId,
         });
-        
+
         // إرسال حدث لحذف إشعارات المنشن في هذا الرد
         this.client.emit('notification.source.deleted', {
           type: 'USER_MENTIONED',
           commentId: replyId,
           isReply: true,
           parentCommentId: commentId,
-          text: reply.text || ''
+          text: reply.text || '',
         });
       }
     }
-    
+
     await this.commentModel.deleteOne({ _id });
     // Optionally, delete all replies to this comment
     await this.commentModel.deleteMany({ parentCommentId: _id });
-    
+
     // Emit event to remove comment/reply notifications
     // Always delete notification for the comment owner
     this.client.emit('notification.source.deleted', {
@@ -329,7 +376,7 @@ export class CommentsService {
       toUserId: comment.createdBy.toString(),
       commentId: commentId,
     });
-    
+
     // Explicitly emit event to delete mention notifications for this comment
     // Include more data to help identify the correct notifications
     this.client.emit('notification.source.deleted', {
@@ -338,17 +385,19 @@ export class CommentsService {
       commentData: commentData, // Include the full comment data
       text: comment.text, // Include the text which might contain mentions
     });
-    
+
     // إرسال حدث لحذف إشعارات التفاعلات على التعليق الأصلي
     this.client.emit('notification.source.deleted', {
       type: 'COMMENT_REACTION',
       commentId: commentId,
-      isMainComment: true
+      isMainComment: true,
     });
-    
+
     if (comment.parentCommentId) {
       // If this is a reply, delete notification for the parent comment owner
-      const parentComment = await this.commentModel.findById(comment.parentCommentId);
+      const parentComment = await this.commentModel.findById(
+        comment.parentCommentId,
+      );
       if (parentComment) {
         this.client.emit('notification.source.deleted', {
           type: 'COMMENT_ADDED',

@@ -9,6 +9,7 @@ import {
   Query,
   Req,
   UseGuards,
+  Inject,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AccessToken } from 'livekit-server-sdk';
@@ -33,6 +34,7 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { ConfigService } from '@nestjs/config';
 import { HttpException, HttpStatus } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
 
 @ApiTags('LiveKit')
 @Controller('livekit')
@@ -46,12 +48,15 @@ export class LivekitController {
     private readonly userModel: Model<UserDocument>,
     private readonly livekitService: LivekitService,
     private readonly configService: ConfigService,
+
   ) {}
 
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get LiveKit access token for a room using secret ID (JWT required)',
-    description: '⚠️ This module is still under development and may change in future releases.'
+    summary:
+      'Get LiveKit access token for a room using secret ID (JWT required)',
+    description:
+      '⚠️ This module is still under development and may change in future releases.',
   })
   @ApiQuery({ name: 'secretId', required: true, description: 'Room secret ID' })
   @ApiResponse({
@@ -108,6 +113,20 @@ export class LivekitController {
           HttpStatus.NOT_FOUND,
         );
       }
+
+      // Check if user is invited
+      if (
+        roomDocument.isPrivate &&
+        !roomDocument.invitedUsers.some(
+          (user) => user._id.toString() === userId,
+        )
+      ) {
+        throw new HttpException(
+          'You are not invited to this room',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
       const roomName = roomDocument.name;
       const livekitRoomName = roomDocument.secretId; // Use secretId for LiveKit room identifier
       const apiKey = process.env.LIVEKIT_API_KEY;
@@ -176,14 +195,23 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create a new room', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiOperation({
+    summary: 'Create a new room',
+    description:
+      '⚠️ This module is still under development and may change in future releases.',
+  })
   @ApiBody({ type: CreateRoomDto })
-  @ApiResponse({ status: 201, description: 'Room created successfully', type: LivekitRoom })
+  @ApiResponse({
+    status: 201,
+    description: 'Room created successfully',
+    type: LivekitRoom,
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(JwtAuthGuard)
   @Post('rooms')
   async createRoom(@Body() createRoomDto: CreateRoomDto, @Req() req) {
     try {
+      console.log('Creating room:', createRoomDto);
       const userId = req.user?.sub;
       if (!userId) {
         throw new HttpException(
@@ -201,8 +229,16 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all rooms', description: '⚠️ This module is still under development and may change in future releases.' })
-  @ApiResponse({ status: 200, description: 'List of all rooms', type: [LivekitRoom] })
+  @ApiOperation({
+    summary: 'Get all rooms',
+    description:
+      '⚠️ This module is still under development and may change in future releases.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of all rooms',
+    type: [LivekitRoom],
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(JwtAuthGuard)
   @Get('rooms')
@@ -211,7 +247,11 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get room by ID', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiOperation({
+    summary: 'Get room by ID',
+    description:
+      '⚠️ This module is still under development and may change in future releases.',
+  })
   @ApiResponse({ status: 200, description: 'Room details', type: LivekitRoom })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Room not found' })
@@ -222,9 +262,17 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update room', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiOperation({
+    summary: 'Update room',
+    description:
+      '⚠️ This module is still under development and may change in future releases.',
+  })
   @ApiBody({ type: UpdateRoomDto })
-  @ApiResponse({ status: 200, description: 'Room updated successfully', type: LivekitRoom })
+  @ApiResponse({
+    status: 200,
+    description: 'Room updated successfully',
+    type: LivekitRoom,
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
     status: 403,
@@ -246,8 +294,16 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete room', description: '⚠️ This module is still under development and may change in future releases.' })
-  @ApiResponse({ status: 200, description: 'Room deleted successfully', type: Object })
+  @ApiOperation({
+    summary: 'Delete room',
+    description:
+      '⚠️ This module is still under development and may change in future releases.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Room deleted successfully',
+    type: Object,
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
     status: 403,
@@ -266,8 +322,16 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get rooms created by current user', description: '⚠️ This module is still under development and may change in future releases.' })
-  @ApiResponse({ status: 200, description: 'List of user rooms', type: [LivekitRoom] })
+  @ApiOperation({
+    summary: 'Get rooms created by current user',
+    description:
+      '⚠️ This module is still under development and may change in future releases.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of user rooms',
+    type: [LivekitRoom],
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(JwtAuthGuard)
   @Get('rooms/user/my-rooms')
@@ -280,7 +344,11 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get room secret ID (only for room creator)', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiOperation({
+    summary: 'Get room secret ID (only for room creator)',
+    description:
+      '⚠️ This module is still under development and may change in future releases.',
+  })
   @ApiResponse({ status: 200, description: 'Room secret ID', type: Object })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
@@ -299,13 +367,32 @@ export class LivekitController {
   }
 
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Join room by secret ID', description: '⚠️ This module is still under development and may change in future releases.' })
+  @ApiOperation({
+    summary: 'Join room by secret ID',
+    description:
+      '⚠️ This module is still under development and may change in future releases.',
+  })
   @ApiResponse({ status: 200, description: 'Room details', type: LivekitRoom })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Room not found or inactive' })
   @UseGuards(JwtAuthGuard)
   @Get('rooms/join/:secretId')
-  async joinRoomBySecretId(@Param('secretId') secretId: string) {
+  async joinRoomBySecretId(@Param('secretId') secretId: string, @Req() req) {
+    const userId = req.user?.sub;
+    const user = await this.userModel.findById(userId).select('email');
+    if (!user) {
+      throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
+    }
+    const room = await this.livekitService.findRoomBySecretIdInternal(secretId);
+    if (
+      room.isPrivate &&
+      !room.invitedUsers.some((id) => id.toString() === userId)
+    ) {
+      throw new HttpException(
+        'You are not invited to this room',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     return await this.livekitService.findRoomBySecretId(secretId);
   }
 }

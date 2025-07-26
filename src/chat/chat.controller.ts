@@ -1,20 +1,49 @@
-import { Controller, Post, UploadedFile, UseGuards, UseInterceptors, Req, Get, Query, Param, Body, Res, HttpStatus, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+  Req,
+  Get,
+  Query,
+  Param,
+  Body,
+  Res,
+  HttpStatus,
+  Delete,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileUploadService } from './file-upload.service';
 import { ChatService } from './chat.service';
 import { Response } from 'express';
-import { ApiBearerAuth, ApiTags, ApiResponse, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiNotFoundResponse, ApiOperation } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiResponse,
+  ApiBadRequestResponse,
+  ApiUnauthorizedResponse,
+  ApiNotFoundResponse,
+  ApiOperation,
+} from '@nestjs/swagger';
 
 @ApiBearerAuth()
 @ApiTags('chat')
 @UseGuards(JwtAuthGuard)
 @Controller('chat')
 export class ChatController {
-  constructor(private readonly fileUploadService: FileUploadService, private readonly chatService: ChatService) {}
+  constructor(
+    private readonly fileUploadService: FileUploadService,
+    private readonly chatService: ChatService,
+  ) {}
 
   @Post('uploadBase64')
-  @ApiOperation({ summary: 'Upload a file to the chat', description: '⚠️ This module is for testing and will be deleted in future releases.' })
+  @ApiOperation({
+    summary: 'Upload a file to the chat',
+    description:
+      '⚠️ This module is for testing and will be deleted in future releases.',
+  })
   @ApiResponse({ status: 201, description: 'File uploaded successfully.' })
   @ApiBadRequestResponse({ description: 'Invalid file data.' })
   async uploadBase64File(
@@ -26,7 +55,11 @@ export class ChatController {
       throw new Error('Invalid file data.');
     }
 
-    const fileId = await this.fileUploadService.uploadBase64File(base64, mimetype, originalname);
+    const fileId = await this.fileUploadService.uploadBase64File(
+      base64,
+      mimetype,
+      originalname,
+    );
     return { url: `/chat/file/${fileId}` };
   }
 
@@ -43,7 +76,11 @@ export class ChatController {
     @Query('limit') limit: string,
     @Query('before') before?: string,
   ) {
-    const messages = await this.chatService.getPaginatedMessages(roomId, parseInt(limit) || 20, before);
+    const messages = await this.chatService.getPaginatedMessages(
+      roomId,
+      parseInt(limit) || 20,
+      before,
+    );
     return { messages };
   }
 
@@ -56,7 +93,10 @@ export class ChatController {
       return res.status(HttpStatus.NOT_FOUND).send('File not found');
     }
     res.setHeader('Content-Type', file.mimetype);
-    res.setHeader('Content-Disposition', `inline; filename="${file.originalname}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${file.originalname}"`,
+    );
     const buffer = Buffer.from(file.data, 'base64');
     return res.send(buffer);
   }
@@ -66,4 +106,4 @@ export class ChatController {
     const userId = req.user._id || req.user.id || req.user.sub;
     return await this.chatService.removeUserFromRoom(roomId, userId);
   }
-} 
+}

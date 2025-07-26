@@ -15,7 +15,7 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
-      forbidNonWhitelisted: true,
+      forbidNonWhitelisted: false,
       transform: true,
     }),
   );
@@ -83,7 +83,6 @@ async function bootstrap() {
   // Start server
   await app.listen(process.env.PORT || 5000);
   console.log(`✅ Server started on port ${process.env.PORT || 5000}`);
-  console.log('this is achange testing deployment')
+  console.log('this is achange testing deployment');
 }
 bootstrap();
-

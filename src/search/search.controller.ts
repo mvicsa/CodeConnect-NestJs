@@ -8,7 +8,13 @@ import {
 } from '@nestjs/common';
 import { SearchService } from './search.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ApiBearerAuth, ApiTags, ApiResponse, ApiBadRequestResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiResponse,
+  ApiBadRequestResponse,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 
 @ApiTags('Search')
 @ApiBearerAuth()
@@ -19,12 +25,14 @@ export class SearchController {
 
   @Get()
   @ApiResponse({ status: 200, description: 'Search results.' })
-  @ApiBadRequestResponse({ description: 'Missing or invalid search query (q).' })
+  @ApiBadRequestResponse({
+    description: 'Missing or invalid search query (q).',
+  })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async search(
     @Query('q') q: string,
     @Query('page') page = '1',
-    @Query('limit') limit = '10'
+    @Query('limit') limit = '10',
   ) {
     if (!q || typeof q !== 'string' || !q.trim()) {
       throw new BadRequestException('Missing or invalid search query (q)');
