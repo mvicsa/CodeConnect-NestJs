@@ -244,7 +244,173 @@ export class CommentsService {
       );
     }
 
+    // --- AI Evaluation Update: Handle both creation/update and removal ---
+    const post = await this.postsService.findOne(comment.postId.toString());
+    
+    // Check if comment has code and post has code (required for AI evaluation)
+    const hasCodeForEvaluation = post && 
+      post.code && 
+      post.codeLang && 
+      comment.code && 
+      comment.codeLang;
+
+    if (hasCodeForEvaluation) {
+      try {
+        // Check if there's an existing AI evaluation for this comment
+        const existingEvaluation = await this.aiCommentEvalModel.findOne({
+          commentId: comment._id,
+        });
+
+        // Generate new evaluation
+        const newEvaluation = await this.aiAgentService.evaluateCommentAnswer({
+          postText: post.text || '',
+          postCode: post.code || '',
+          commentText: comment.text || '',
+          commentCode: comment.code || '',
+          language: (comment.codeLang || post.codeLang) || '',
+        });
+
+        if (existingEvaluation) {
+          // Update existing evaluation
+          await this.aiCommentEvalModel.updateOne(
+            { commentId: comment._id },
+            { evaluation: newEvaluation }
+          );
+        } else {
+          // Create new evaluation
+          await this.aiCommentEvalModel.create({
+            postId: (post as any)._id,
+            commentId: comment._id,
+            evaluation: newEvaluation,
+          });
+        }
+
+        // Ensure hasAiEvaluation is set to true
+        if (!comment.hasAiEvaluation) {
+          comment.set('hasAiEvaluation', true);
+          await comment.save();
+        }
+      } catch (err) {
+        // Log error but do not block comment update
+        console.error('AI evaluation update failed:', err.message);
+      }
+    } else {
+      // Comment or post no longer has code - remove AI evaluation
+      try {
+        // Check if there's an existing AI evaluation to remove
+        const existingEvaluation = await this.aiCommentEvalModel.findOne({
+          commentId: comment._id,
+        });
+
+        if (existingEvaluation) {
+          // Remove the AI evaluation from database
+          await this.aiCommentEvalModel.deleteOne({ commentId: comment._id });
+          console.log(`Removed AI evaluation for comment ${comment._id} - no code content`);
+        }
+
+        // Set hasAiEvaluation to false if it was true
+        if (comment.hasAiEvaluation) {
+          comment.set('hasAiEvaluation', false);
+          await comment.save();
+        }
+      } catch (err) {
+        // Log error but do not block comment update
+        console.error('AI evaluation removal failed:', err.message);
+      }
+    }
+
     return comment;
+  }
+
+  /**
+   * Update AI evaluation for a comment
+   * @param commentId The comment ID
+   * @param userId The user ID (for authorization)
+   * @returns Promise<void>
+   */
+  async updateAIEvaluation(commentId: string, userId: string): Promise<void> {
+    const comment = await this.commentModel.findById(commentId);
+    if (!comment) throw new NotFoundException('Comment not found');
+    if (comment.createdBy.toString() !== userId)
+      throw new ForbiddenException('You can only update AI evaluation for your own comments');
+
+    const post = await this.postsService.findOne(comment.postId.toString());
+    
+    // Check if comment has code and post has code (required for AI evaluation)
+    const hasCodeForEvaluation = post && 
+      post.code && 
+      post.codeLang && 
+      comment.code && 
+      comment.codeLang;
+
+    if (hasCodeForEvaluation) {
+      try {
+        // Generate new evaluation
+        const newEvaluation = await this.aiAgentService.evaluateCommentAnswer({
+          postText: post.text || '',
+          postCode: post.code || '',
+          commentText: comment.text || '',
+          commentCode: comment.code || '',
+          language: (comment.codeLang || post.codeLang) || '',
+        });
+
+        // Check if there's an existing AI evaluation for this comment
+        const existingEvaluation = await this.aiCommentEvalModel.findOne({
+          commentId: comment._id,
+        });
+
+        if (existingEvaluation) {
+          // Update existing evaluation
+          await this.aiCommentEvalModel.updateOne(
+            { commentId: comment._id },
+            { evaluation: newEvaluation }
+          );
+        } else {
+          // Create new evaluation
+          await this.aiCommentEvalModel.create({
+            postId: (post as any)._id,
+            commentId: comment._id,
+            evaluation: newEvaluation,
+          });
+        }
+
+        // Ensure hasAiEvaluation is set to true
+        if (!comment.hasAiEvaluation) {
+          comment.set('hasAiEvaluation', true);
+          await comment.save();
+        }
+      } catch (err) {
+        // Log error but do not block the operation
+        console.error('AI evaluation update failed:', err.message);
+        throw new Error('Failed to update AI evaluation');
+      }
+    } else {
+      // Comment or post no longer has code - remove AI evaluation
+      try {
+        // Check if there's an existing AI evaluation to remove
+        const existingEvaluation = await this.aiCommentEvalModel.findOne({
+          commentId: comment._id,
+        });
+
+        if (existingEvaluation) {
+          // Remove the AI evaluation from database
+          await this.aiCommentEvalModel.deleteOne({ commentId: comment._id });
+          console.log(`Removed AI evaluation for comment ${comment._id} - no code content`);
+        }
+
+        // Set hasAiEvaluation to false if it was true
+        if (comment.hasAiEvaluation) {
+          comment.set('hasAiEvaluation', false);
+          await comment.save();
+        }
+      } catch (err) {
+        // Log error but do not block the operation
+        console.error('AI evaluation removal failed:', err.message);
+        throw new Error('Failed to remove AI evaluation');
+      }
+      
+      throw new Error('Comment or post does not have required code for AI evaluation');
+    }
   }
 
   private async handleMentionUpdates(
