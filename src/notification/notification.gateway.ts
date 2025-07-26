@@ -56,6 +56,12 @@ export class NotificationGateway {
     const room = `user:${toUserId}`;
     const clientsInRoom = this.server.sockets.adapter.rooms.get(room);
 
+    console.log('📡 sendNotificationToUser called with:');
+    console.log('📡 toUserId:', toUserId);
+    console.log('📡 room:', room);
+    console.log('📡 clientsInRoom:', clientsInRoom);
+    console.log('📡 clientsInRoom size:', clientsInRoom?.size);
+
     if (clientsInRoom && clientsInRoom.size > 0) {
       this.logger.log(
         `📡 Emitting notification to ${room} (${clientsInRoom.size} client(s))`,
@@ -70,7 +76,14 @@ export class NotificationGateway {
 
   sendToUsers(notifications: Notification[]): void {
     for (const notification of notifications) {
-      this.sendNotificationToUser(notification.toUserId, notification);
+      const toUserId = typeof notification.toUserId === 'object' 
+        ? (notification.toUserId as any)._id || (notification.toUserId as any).id
+        : notification.toUserId;
+      
+      console.log('📤 sendToUsers - toUserId:', toUserId);
+      console.log('📤 sendToUsers - notification.toUserId type:', typeof notification.toUserId);
+      
+      this.sendNotificationToUser(toUserId, notification);
     }
   }
 }

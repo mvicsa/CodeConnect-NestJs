@@ -17,6 +17,7 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  HttpException,
 } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { Post as PostModel } from './shemas/post.schema';
@@ -139,6 +140,64 @@ export class PostsController {
     return this.postsService.getTrendingTags();
   }
 
+  @Get('archive')
+  @ApiOperation({ summary: 'Get archived posts with comments (posts with code and at least one comment with Great Answer from AI)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search in post text, code, or tags' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'List of archived posts with comments. AI comments are marked with aiComment field.', 
+    schema: {
+      type: 'array',
+      items: {
+        allOf: [
+          { $ref: '#/components/schemas/Post' },
+          {
+            type: 'object',
+            properties: {
+              comments: {
+                type: 'array',
+                items: {
+                  allOf: [
+                    { $ref: '#/components/schemas/Comment' },
+                    {
+                      type: 'object',
+                      properties: {
+                        aiComment: {
+                          type: 'object',
+                          nullable: true,
+                          description: 'AI comment data if this comment has AI evaluation (Great Answer from AI), null otherwise'
+                        }
+                      }
+                    }
+                  ]
+                },
+                description: 'Comments with AI comments marked'
+              }
+            }
+          }
+        ]
+      }
+    }
+  })
+  @ApiBadRequestResponse({ description: 'Invalid query parameters.' })
+  @ApiInternalServerErrorResponse({ description: 'Internal server error.' })
+  async getArchive(
+    @Query('page') page = '1',
+    @Query('limit') limit = '10',
+    @Query('search') search?: string,
+  ) {
+    if (isNaN(Number(page)) || isNaN(Number(limit))) {
+      throw new BadRequestException('Invalid query parameters.');
+    }
+    try {
+      return await this.postsService.findArchivePosts(Number(page), Number(limit), search);
+    } catch (error) {
+      throw new InternalServerErrorException('Internal server error.');
+    }
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a post by id' })
   @ApiParam({ name: 'id', type: String })
@@ -254,20 +313,33 @@ export class PostsController {
           }
         }
       }
-      // Prevent self-notification for post.created
-      if (req.user.sub !== extractObjectId(response.createdBy)) {
-        this.client.emit('post.created', {
-          toUserId: extractObjectId(response.createdBy),
-          data: response,
-          fromUserId: req.user.sub,
-          type: NotificationType.POST_CREATED,
-          content: 'New post created',
-        });
-      }
+      // Send notification for new post to followers
+      console.log('🔥 Emitting post.created event for user:', req.user.sub);
+      console.log('📝 Post data:', response);
+      console.log('🆔 Post ID:', (response as any)._id || (response as any).id);
+      
+      const notificationData = {
+        toUserId: extractObjectId(response.createdBy),
+        data: {
+          ...response,
+          postId: (response as any)._id || (response as any).id
+        },
+        fromUserId: req.user.sub,
+        type: NotificationType.POST_CREATED,
+        content: 'New post created',
+      };
+      
+      this.client.emit('post.created', notificationData);
+      
+      console.log('✅ post.created event emitted successfully');
       return response;
     } catch (error) {
-      if (error.status === 409)
-        throw new ConflictException('Post already exists.');
+      if (error instanceof BadRequestException) {
+        // Return the error message in a consistent format for the frontend
+        throw new BadRequestException(error.message || 'Invalid request.');
+      }
+      if (error.status === 409) throw new ConflictException('Post already exists.');
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException('Internal server error.');
     }
   }
@@ -357,10 +429,9 @@ export class PostsController {
     try {
       return await this.postsService.update(id, body, req.user.sub);
     } catch (error) {
-      if (error instanceof NotFoundException)
-        throw new NotFoundException('Post not found');
-      if (error instanceof ForbiddenException)
-        throw new ForbiddenException('You can only edit your own posts');
+      if (error instanceof HttpException) {
+        throw new HttpException(error.message || 'Request failed', error.getStatus ? error.getStatus() : 400);
+      }
       throw new InternalServerErrorException('Internal server error.');
     }
   }
@@ -384,10 +455,9 @@ export class PostsController {
       });
       return;
     } catch (error) {
-      if (error instanceof NotFoundException)
-        throw new NotFoundException('Post not found');
-      if (error instanceof ForbiddenException)
-        throw new ForbiddenException('You can only delete your own posts');
+      if (error instanceof HttpException) {
+        throw new HttpException(error.message || 'Request failed', error.getStatus ? error.getStatus() : 400);
+      }
       throw new InternalServerErrorException('Internal server error.');
     }
   }

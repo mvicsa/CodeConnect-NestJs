@@ -15,6 +15,7 @@ import { NotificationModule } from './notification/notification.module';
 import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { SearchModule } from './search/search.module';
 import { SparksModule } from './sparks/sparks.module';
+import { BlockModule } from './block/block.module';
 
 @Module({
   imports: [
@@ -37,7 +38,8 @@ import { SparksModule } from './sparks/sparks.module';
     NotificationModule,
     RabbitMQModule,
     SearchModule,
-    SparksModule
+    SparksModule,
+    BlockModule
   ],
   controllers: [AppController],
   providers: [AppService],

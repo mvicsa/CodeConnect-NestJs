@@ -24,18 +24,19 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
     return user;
+    // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
 
   async findAll() {
     // Exclude password
     return this.userModel.find().select('-password');
+    // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
 
   async findByUsernames(usernames: string[]): Promise<User[]> {
     if (!usernames || usernames.length === 0) return [];
-    return this.userModel
-      .find({ username: { $in: usernames } })
-      .select('_id username firstName lastName avatar');
+    return this.userModel.find({ username: { $in: usernames } }).select('_id username firstName lastName avatar');
+    // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
 
   async followUser(userId: string, targetUserId: string) {
@@ -45,6 +46,10 @@ export class UsersService {
     if (!user || !targetUser) throw new Error('User not found');
     if (user.following.includes(targetUserId))
       throw new Error('Already following');
+    
+    // Check if users are blocked (this will be handled by the block guard)
+    // The block guard will prevent this method from being called if users are blocked
+    
     user.following.push(targetUserId);
     targetUser.followers.push(userId);
     await user.save();
@@ -67,6 +72,10 @@ export class UsersService {
     if (!user || !targetUser) throw new Error('User not found');
     if (!user.following.includes(targetUserId))
       throw new Error('Not following');
+    
+    // Note: Blocked users are handled by the block system
+    // This method can be called safely even for blocked users
+    
     user.following = user.following.filter((id) => id !== targetUserId);
     targetUser.followers = targetUser.followers.filter((id) => id !== userId);
     await user.save();
@@ -88,6 +97,9 @@ export class UsersService {
       options: { limit: Number(limit), skip: Number(skip) },
     });
     if (!user) throw new Error('User not found');
+    
+    // Note: Blocked users are filtered out by the BlockFilterInterceptor
+    // This ensures blocked users don't appear in followers list
     return user.followers;
   }
 
@@ -111,6 +123,7 @@ export class UsersService {
       .select('username firstName lastName avatar')
       .limit(Number(limit))
       .skip(Number(skip));
+    // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
 
   async updateUser(userId: string, updateUserDto: any) {
@@ -119,11 +132,11 @@ export class UsersService {
       .select('-password');
     if (!user) throw new NotFoundException('User not found');
     return user;
+    // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
 
   async getUserById(userId: string) {
-    return this.userModel
-      .findById(userId)
-      .select('username firstName lastName');
+    return this.userModel.findById(userId).select('username firstName lastName');
+    // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
 }
