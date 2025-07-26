@@ -93,7 +93,11 @@ export class Comment {
   @Prop()
   updatedAt?: Date;
 
-  @ApiProperty({ required: false, type: Boolean, description: 'Indicates if this comment has an AI evaluation' })
+  @ApiProperty({
+    required: false,
+    type: Boolean,
+    description: 'Indicates if this comment has an AI evaluation',
+  })
   @Prop({ default: false })
   hasAiEvaluation?: boolean;
 }

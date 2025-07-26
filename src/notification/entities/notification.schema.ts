@@ -84,7 +84,8 @@ export enum NotificationType {
   FOLLOWED_USER = 'FOLLOWED_USER',
   MESSAGE_RECEIVED = 'MESSAGE_RECEIVED',
   LOGIN = 'LOGIN', // New: for login notifications
-  USER_MENTIONED = 'USER_MENTIONED', // New: when a user is mentioned
+  USER_MENTIONED = 'USER_MENTIONED', // New: when a user is mentioned,
+  ROOM_CREATED = 'ROOM_CREATED',
 }
 // // Add more as needed
 // POST_SHARED = 'POST_SHARED', // New: when a post is shared
@@ -95,16 +96,16 @@ export enum NotificationType {
 export class Notification {
   @Prop({ required: true, type: String, ref: 'User' })
   toUserId: string; // the user who receives the notification
-  
+
   @Prop({ required: true })
   content: string; // readable text like you have a new message / comment / post
-  
+
   @Prop({ required: true, enum: NotificationType })
   type: NotificationType; // like, comment post
-  
+
   @Prop({ default: false })
   isRead: boolean;
-  
+
   @Prop({ type: Object, required: true })
   data: {
     postId?: string;
@@ -113,7 +114,7 @@ export class Notification {
     extra?: Record<string, any>;
     [key: string]: any; // for flexibility
   }; //can include postId or commentId
-  
+
   @Prop({ type: String, ref: 'User' })
   fromUserId?: string;
 }
@@ -145,55 +146,66 @@ NotificationSchema.statics.findByUser = function (toUserId: string) {
     .populate({
       path: 'data.postId',
       model: 'Post',
-      select: 'text code codeLang image video tags reactions createdAt updatedAt',
+      select:
+        'text code codeLang image video tags reactions createdAt updatedAt',
       populate: {
         path: 'createdBy',
         model: 'User',
-        select: 'username firstName lastName avatar'
-      }
+        select: 'username firstName lastName avatar',
+      },
     })
     .populate({
       path: 'data.commentId',
       model: 'Comment',
-      select: 'text code codeLang postId parentCommentId reactions createdAt updatedAt',
+      select:
+        'text code codeLang postId parentCommentId reactions createdAt updatedAt',
       populate: [
         {
           path: 'createdBy',
           model: 'User',
-          select: 'username firstName lastName avatar'
+          select: 'username firstName lastName avatar',
         },
         {
           path: 'postId',
           model: 'Post',
-          select: 'text code codeLang image video tags reactions createdAt updatedAt',
+          select:
+            'text code codeLang image video tags reactions createdAt updatedAt',
           populate: {
             path: 'createdBy',
             model: 'User',
-            select: 'username firstName lastName avatar'
-          }
-        }
-      ]
+            select: 'username firstName lastName avatar',
+          },
+        },
+      ],
     })
     .sort({ createdAt: -1 })
     .lean()
     .exec()
-    .then(notifications => {
+    .then((notifications) => {
       // تحويل البيانات لتكون في الشكل المطلوب
-      return notifications.map(notification => {
+      return notifications.map((notification) => {
         const result = { ...notification };
-        
+
         // إذا كان هناك postId وتم populate له، انسخ البيانات إلى data.post
-        if (result.data && result.data.postId && typeof result.data.postId === 'object') {
+        if (
+          result.data &&
+          result.data.postId &&
+          typeof result.data.postId === 'object'
+        ) {
           result.data.post = result.data.postId;
           result.data.postId = result.data.postId._id;
         }
-        
+
         // إذا كان هناك commentId وتم populate له، انسخ البيانات إلى data.comment
-        if (result.data && result.data.commentId && typeof result.data.commentId === 'object') {
+        if (
+          result.data &&
+          result.data.commentId &&
+          typeof result.data.commentId === 'object'
+        ) {
           result.data.comment = result.data.commentId;
           result.data.commentId = result.data.commentId._id;
         }
-        
+
         return result;
       });
     });

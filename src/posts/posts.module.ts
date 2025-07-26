@@ -13,7 +13,10 @@ import {
 } from './shemas/code-suggestion.schema';
 import { RabbitMQModule } from 'src/rabbitmq/rabbitmq.module';
 import { UsersModule } from '../users/users.module';
-import { AICommentEvaluation, AICommentEvaluationSchema } from './shemas/code-suggestion.schema';
+import {
+  AICommentEvaluation,
+  AICommentEvaluationSchema,
+} from './shemas/code-suggestion.schema';
 
 @Module({
   imports: [
@@ -29,6 +32,5 @@ import { AICommentEvaluation, AICommentEvaluationSchema } from './shemas/code-su
   ],
   providers: [PostsService, CommentsService],
   controllers: [PostsController, CommentsController],
-  
 })
 export class PostsModule {}

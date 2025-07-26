@@ -49,12 +49,15 @@ function extractObjectId(val: any): string {
   if (!val) return '';
   if (typeof val === 'string') {
     // Match new ObjectId('...') or _id: '...'
-    const match = val.match(/_id: new ObjectId\('([a-fA-F0-9]{24})'\)/) || val.match(/_id: '([a-fA-F0-9]{24})'/);
+    const match =
+      val.match(/_id: new ObjectId\('([a-fA-F0-9]{24})'\)/) ||
+      val.match(/_id: '([a-fA-F0-9]{24})'/);
     if (match) return match[1];
     if (/^[a-fA-F0-9]{24}$/.test(val.trim())) return val.trim();
     try {
       const parsed = JSON.parse(val);
-      if (parsed && typeof parsed === 'object' && parsed._id) return parsed._id.toString();
+      if (parsed && typeof parsed === 'object' && parsed._id)
+        return parsed._id.toString();
     } catch {
       return val;
     }
@@ -65,7 +68,9 @@ function extractObjectId(val: any): string {
 
 function extractMentions(text: string): string[] {
   if (!text) return [];
-  return Array.from(new Set((text.match(/@([a-zA-Z0-9_]+)/g) || []).map(m => m.slice(1))));
+  return Array.from(
+    new Set((text.match(/@([a-zA-Z0-9_]+)/g) || []).map((m) => m.slice(1))),
+  );
 }
 
 @ApiTags('Posts')
@@ -76,7 +81,8 @@ export class PostsController {
     private readonly postsService: PostsService,
     @Inject('RABBITMQ_PRODUCER') private readonly client: ClientProxy,
     private readonly usersService: UsersService,
-    @InjectModel(AICommentEvaluation.name) private aiCommentEvalModel: Model<any>,
+    @InjectModel(AICommentEvaluation.name)
+    private aiCommentEvalModel: Model<any>,
   ) {}
 
   @Get()
@@ -113,7 +119,10 @@ export class PostsController {
           Number(limit),
         );
       }
-      const posts = await this.postsService.findAll(Number(page), Number(limit));
+      const posts = await this.postsService.findAll(
+        Number(page),
+        Number(limit),
+      );
       return posts;
     } catch (error) {
       throw new InternalServerErrorException('Internal server error.');
@@ -122,7 +131,11 @@ export class PostsController {
 
   @Get('tags')
   @ApiOperation({ summary: 'Get trending tags (top 10 most used)' })
-  @ApiResponse({ status: 200, description: 'List of trending tags with usage count', type: [Object] })
+  @ApiResponse({
+    status: 200,
+    description: 'List of trending tags with usage count',
+    type: [Object],
+  })
   async getTrendingTags() {
     return this.postsService.getTrendingTags();
   }
@@ -261,7 +274,11 @@ export class PostsController {
     },
     description: 'Post data (without _id, createdBy)',
   })
-  @ApiResponse({ status: 201, description: 'The created post', type: PostModel })
+  @ApiResponse({
+    status: 201,
+    description: 'The created post',
+    type: PostModel,
+  })
   @ApiBadRequestResponse({ description: 'Invalid post data.' })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   @ApiConflictResponse({ description: 'Post already exists.' })
@@ -280,7 +297,9 @@ export class PostsController {
       // Process mentions for notifications
       const mentions = extractMentions(String(response.text));
       if (mentions.length > 0) {
-        const mentionedUsers = await this.usersService.findByUsernames(mentions as string[]);
+        const mentionedUsers = await this.usersService.findByUsernames(
+          mentions as string[],
+        );
         for (const user of mentionedUsers) {
           // Emit mention notification
           if ((user as any)._id.toString() !== req.user.sub) {
@@ -345,16 +364,19 @@ export class PostsController {
     @Body() body: { reaction: string },
     @Req() req: Request & { user: any },
   ) {
-    const { post: response, action } = await this.postsService.addOrUpdateReaction(
-      postId,
-      req.user.sub,
-      req.user.username,
-      body.reaction,
-    );
+    const { post: response, action } =
+      await this.postsService.addOrUpdateReaction(
+        postId,
+        req.user.sub,
+        req.user.username,
+        body.reaction,
+      );
 
     // ابعت الإشعار فقط لو الريأكشن اتضاف
     if (action === 'add') {
-      const postId = (response as any)._id ? (response as any)._id.toString() : (response as any).id?.toString();
+      const postId = (response as any)._id
+        ? (response as any)._id.toString()
+        : (response as any).id?.toString();
       // Prevent self-notification for post.reaction
       if (extractObjectId(response.createdBy) !== req.user.sub) {
         this.client.emit('post.reaction', {
@@ -378,7 +400,10 @@ export class PostsController {
         fromUserId,
         postId,
       });
-      console.log('we emitted the notification.source.deleted event for post reaction removal', response);
+      console.log(
+        'we emitted the notification.source.deleted event for post reaction removal',
+        response,
+      );
     }
     return response;
   }
@@ -389,7 +414,11 @@ export class PostsController {
   @ApiOperation({ summary: 'Update a post by id' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: PostModel, description: 'Partial post data' })
-  @ApiResponse({ status: 200, description: 'The updated post', type: PostModel })
+  @ApiResponse({
+    status: 200,
+    description: 'The updated post',
+    type: PostModel,
+  })
   @ApiNotFoundResponse({ description: 'Post not found' })
   @ApiForbiddenResponse({ description: 'You can only edit your own posts' })
   async update(

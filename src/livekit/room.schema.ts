@@ -2,8 +2,6 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 
-export type LivekitRoomDocument = LivekitRoom & Document;
-
 @Schema({ timestamps: true })
 export class LivekitRoom {
   @ApiProperty()
@@ -41,6 +39,15 @@ export class LivekitRoom {
   @ApiProperty({ required: false, type: String })
   @Prop()
   updatedAt?: Date;
+
+  @Prop([{ type: Types.ObjectId, ref: 'User' }]) // Reference User model explicitly
+  invitedUsers: Types.ObjectId[];
 }
 
+export type LivekitRoomDocument = LivekitRoom & Document;
+
+export type PopulatedLivekitRoomDocument = LivekitRoom &
+  Document & {
+    invitedUsers: Array<{ _id: string; username: string; email: string }>;
+  };
 export const LivekitRoomSchema = SchemaFactory.createForClass(LivekitRoom);

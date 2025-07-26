@@ -145,7 +145,8 @@ export class PostsService {
   }
 
   async findByTag(tag: string): Promise<Post[]> {
-    return this.postModel.find({ tags: { $regex: new RegExp(`^${tag}$`, 'i') } })
+    return this.postModel
+      .find({ tags: { $regex: new RegExp(`^${tag}$`, 'i') } })
 
       .sort({ createdAt: -1 })
       .populate('createdBy', '-password')
@@ -256,7 +257,7 @@ export class PostsService {
         { $group: { _id: '$tags', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 },
-        { $project: { _id: 0, name: '$_id', count: 1 } }
+        { $project: { _id: 0, name: '$_id', count: 1 } },
       ]);
       return result;
     } catch (error) {
