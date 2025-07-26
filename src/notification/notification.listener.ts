@@ -256,7 +256,7 @@ export class NotificationListener {
               fromUserId: data.fromUserId,
               data: data.data,
               type: NotificationType.POST_REACTION,
-              content: `A post for a person you follow has been reacted to by ${data.fromUserId || 'someone'}`,
+              content: `reacted a post for a person you follow`,
             };
           }
           return undefined;
