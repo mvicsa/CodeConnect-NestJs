@@ -294,16 +294,25 @@ export class PostsController {
           }
         }
       }
-      // Prevent self-notification for post.created
-      if (req.user.sub !== extractObjectId(response.createdBy)) {
-        this.client.emit('post.created', {
-          toUserId: extractObjectId(response.createdBy),
-          data: response,
-          fromUserId: req.user.sub,
-          type: NotificationType.POST_CREATED,
-          content: 'New post created',
-        });
-      }
+      // Send notification for new post to followers
+      console.log('🔥 Emitting post.created event for user:', req.user.sub);
+      console.log('📝 Post data:', response);
+      console.log('🆔 Post ID:', (response as any)._id || (response as any).id);
+      
+      const notificationData = {
+        toUserId: extractObjectId(response.createdBy),
+        data: {
+          ...response,
+          postId: (response as any)._id || (response as any).id
+        },
+        fromUserId: req.user.sub,
+        type: NotificationType.POST_CREATED,
+        content: 'New post created',
+      };
+      
+      this.client.emit('post.created', notificationData);
+      
+      console.log('✅ post.created event emitted successfully');
       return response;
     } catch (error) {
       if (error instanceof BadRequestException) {

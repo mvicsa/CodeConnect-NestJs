@@ -59,7 +59,6 @@ export class AuthController {
   @ApiBadRequestResponse({ description: 'Validation failed' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async login(@Body() loginDto: LoginDto) {
-    this.logger.log(`LoginDto ${JSON.stringify(loginDto)}`);
     try {
       await this.client.connect();
       const response = await this.authService.login(loginDto);

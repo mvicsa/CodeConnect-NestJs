@@ -90,10 +90,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
               connectionTimeout,
             },
           };
-
-          logger.log(
-            `Producer config: ${JSON.stringify(config.options, null, 2)}`,
-          );
+          
           return config as ClientProviderOptions;
         },
       },

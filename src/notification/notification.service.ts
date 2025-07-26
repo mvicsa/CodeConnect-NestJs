@@ -464,7 +464,16 @@ export class NotificationService {
         });
       });
       
-      this.gateway.sendToUsers(populatedNotifications);
+      // إرسال الإشعارات للمستخدمين مع التأكد من أن toUserId هو string
+      for (const notification of populatedNotifications) {
+        const toUserId = typeof notification.toUserId === 'object' 
+          ? (notification.toUserId as any)._id || (notification.toUserId as any).id
+          : notification.toUserId;
+        
+        console.log('📤 Sending notification to user:', toUserId);
+        
+        this.gateway.sendNotificationToUser(toUserId, notification);
+      }
       return populatedNotifications;
     } catch (error) {
       console.error('Error adding notifications: in addNotifications', error);

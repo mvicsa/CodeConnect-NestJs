@@ -121,7 +121,6 @@ export class NotificationListener {
           fromUserId: data.fromUserId,
           // Don't log full data object
         };
-        this.logger.debug(`${message}: ${JSON.stringify(safeData)}`);
       } else {
         this.logger.debug(message);
       }
@@ -170,11 +169,12 @@ export class NotificationListener {
     @Payload() notificationDto: CreateNotificationDto,
     @Ctx() context: RmqContext,
   ) {
-    this.logger.log('🔥 handlePostCreated triggered');
+    this.logger.log('🔥🔥🔥 handlePostCreated triggered');
     this.logger.log(
       `📨 Received post.created event for postId: ${notificationDto.content}`,
       notificationDto,
     );
+    console.log('🎯 POST.CREATED EVENT RECEIVED:', notificationDto);
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
     try {
@@ -182,8 +182,12 @@ export class NotificationListener {
       notificationDto.toUserId = extractObjectId(notificationDto.toUserId);
       notificationDto.fromUserId = extractObjectId(notificationDto.fromUserId);
       this.logger.log(`Processing post.created for `, notificationDto);
+      
       const userService = this.userService; // Use the injected userService directly
       const followers: any[] = await userService.getFollowers(notificationDto.toUserId);
+      
+      this.logger.log(`👥 Found ${followers.length} followers for user: ${notificationDto.toUserId}`);
+      
       if (followers.length === 0) {
         this.logger.log(
           '⚠️ No followers found, skipping notification creation',
@@ -196,17 +200,20 @@ export class NotificationListener {
         .map((follower) => ({
           toUserId: follower._id as string,
           fromUserId: notificationDto.toUserId,
-          content: `User ${notificationDto.toUserId} created a new post`,
+          content: `created a new post`,
           type: NotificationType.POST_CREATED,
           data: notificationDto.data,
         }));
+      
+      this.logger.log(`📧 Creating ${notifications.length} notifications for followers`);
+      
       await this.notificationService.addNotifications(notifications);
       this.logger.log(
         `💾 Created notifications for ${notifications.length} followers`,
       );
       channel.ack(originalMsg);
       this.logger.log(
-        `✅ Acknowledged post.created for postId: ${notificationDto.data.postId}`,
+        `✅ Acknowledged post.created for postId: ${notificationDto.data?.postId || 'undefined'}`,
       );
     } catch (error) {
       this.logger.error(
@@ -731,8 +738,6 @@ export class NotificationListener {
     @Ctx() context: RmqContext,
   ) {
     this.logger.log('🔥🔥🔥 Mention handler started', data);
-    console.log('[DEBUG] Mention data structure:', JSON.stringify(data, null, 2));
-    console.log('[DEBUG] Mention data.data:', JSON.stringify(data.data, null, 2));
     
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();

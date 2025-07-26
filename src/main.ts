@@ -71,14 +71,6 @@ async function bootstrap() {
   });
   await app.startAllMicroservices();
   console.log(`✅ RabbitMQ connected to queue: ${process.env.RMQ_QUEUE}`);
-  // Log environment variables
-  console.log(
-    `Environment Variables: ${JSON.stringify({
-      AMQP_URL: configService.get<string>('AMQP_URL'),
-      RMQ_QUEUE: configService.get<string>('RMQ_QUEUE'),
-      RMQ_PREFETCH_COUNT: configService.get<string>('RMQ_PREFETCH_COUNT'),
-    })}`,
-  );
 
   // Start server
   await app.listen(process.env.PORT || 5000);
