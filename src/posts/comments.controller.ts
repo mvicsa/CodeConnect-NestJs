@@ -14,6 +14,8 @@ import {
   ConflictException,
   InternalServerErrorException,
   Inject,
+  NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { CommentsService } from './comments.service';
 import { Comment as CommentModel } from './shemas/comment.schema';
@@ -157,6 +159,67 @@ export class CommentsController {
       return { message: 'No AI evaluation available for this comment.' };
     }
     return evaluation;
+  }
+
+  @Get(':id/ai-evaluation-status')
+  @ApiOperation({ summary: 'Get AI evaluation status for a comment' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200, description: 'AI evaluation status for the comment' })
+  async getAIEvaluationStatus(@Param('id') id: string) {
+    const comment = await this.commentsService.findOne(id);
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    const evaluation = await this.aiCommentEvalModel
+      .findOne({ commentId: id })
+      .lean();
+
+    return {
+      hasAiEvaluation: comment.hasAiEvaluation || false,
+      evaluation: evaluation ? {
+        evaluation: (evaluation as any).evaluation,
+        createdAt: (evaluation as any).createdAt,
+        updatedAt: (evaluation as any).updatedAt
+      } : null,
+      canHaveEvaluation: !!(comment.code && comment.codeLang)
+    };
+  }
+
+  @Post(':id/update-ai-evaluation')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Manually update AI evaluation for a comment' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200, description: 'AI evaluation updated successfully' })
+  @ApiResponse({ status: 404, description: 'Comment not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden - not comment owner' })
+  @ApiResponse({ status: 500, description: 'Failed to update AI evaluation' })
+  async updateAIEvaluation(
+    @Param('id') id: string,
+    @Req() req: Request & { user: any },
+  ) {
+    try {
+      // Use the dedicated method for AI evaluation update
+      await this.commentsService.updateAIEvaluation(id, req.user.sub);
+      
+      // Get the updated evaluation
+      const evaluation = await this.aiCommentEvalModel
+        .findOne({ commentId: id })
+        .lean();
+      
+      return {
+        message: 'AI evaluation updated successfully',
+        evaluation: evaluation || { message: 'No AI evaluation available for this comment.' }
+      };
+    } catch (error) {
+      if (error.message === 'Failed to update AI evaluation') {
+        throw new InternalServerErrorException('Failed to update AI evaluation');
+      }
+      if (error.message === 'Comment or post does not have required code for AI evaluation') {
+        throw new BadRequestException('Comment or post does not have required code for AI evaluation');
+      }
+      throw error;
+    }
   }
 
   @Put(':id')
