@@ -35,7 +35,7 @@ import { SearchModule } from './search/search.module';
     LivekitModule,
     NotificationModule,
     RabbitMQModule,
-    SearchModule
+    SearchModule,
   ],
   controllers: [AppController],
   providers: [AppService],

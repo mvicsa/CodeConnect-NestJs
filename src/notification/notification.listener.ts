@@ -40,7 +40,8 @@ function extractUsername(val: any): string {
   if (typeof val === 'string') {
     try {
       const parsed = JSON.parse(val);
-      if (parsed && typeof parsed === 'object' && parsed.username) return parsed.username;
+      if (parsed && typeof parsed === 'object' && parsed.username)
+        return parsed.username;
     } catch {
       return val;
     }
@@ -53,12 +54,15 @@ function extractObjectId(val: any): string {
   if (!val) return '';
   if (typeof val === 'string') {
     // Match new ObjectId('...') or _id: '...'
-    const match = val.match(/_id: new ObjectId\('([a-fA-F0-9]{24})'\)/) || val.match(/_id: '([a-fA-F0-9]{24})'/);
+    const match =
+      val.match(/_id: new ObjectId\('([a-fA-F0-9]{24})'\)/) ||
+      val.match(/_id: '([a-fA-F0-9]{24})'/);
     if (match) return match[1];
     if (/^[a-fA-F0-9]{24}$/.test(val.trim())) return val.trim();
     try {
       const parsed = JSON.parse(val);
-      if (parsed && typeof parsed === 'object' && parsed._id) return parsed._id.toString();
+      if (parsed && typeof parsed === 'object' && parsed._id)
+        return parsed._id.toString();
     } catch {
       return val;
     }
@@ -74,7 +78,8 @@ function extractFirstLastUsername(val: any): string {
     try {
       const parsed = JSON.parse(val);
       if (parsed && typeof parsed === 'object') {
-        if (parsed.firstName && parsed.lastName) return parsed.firstName + ' ' + parsed.lastName;
+        if (parsed.firstName && parsed.lastName)
+          return parsed.firstName + ' ' + parsed.lastName;
         if (parsed.username) return parsed.username;
         if (parsed._id) return parsed._id;
       }
@@ -83,7 +88,8 @@ function extractFirstLastUsername(val: any): string {
     }
   }
   if (typeof val === 'object') {
-    if (val.firstName && val.lastName) return val.firstName + ' ' + val.lastName;
+    if (val.firstName && val.lastName)
+      return val.firstName + ' ' + val.lastName;
     if (val.username) return val.username;
     if (val._id) return val._id;
   }
@@ -180,7 +186,9 @@ export class NotificationListener {
       notificationDto.fromUserId = extractObjectId(notificationDto.fromUserId);
       this.logger.log(`Processing post.created for `, notificationDto);
       const userService = this.userService; // Use the injected userService directly
-      const followers: any[] = await userService.getFollowers(notificationDto.toUserId);
+      const followers: any[] = await userService.getFollowers(
+        notificationDto.toUserId,
+      );
       if (followers.length === 0) {
         this.logger.log(
           '⚠️ No followers found, skipping notification creation',
@@ -189,7 +197,9 @@ export class NotificationListener {
         return;
       }
       const notifications: CreateNotificationDto[] = followers
-        .filter((follower) => follower._id.toString() !== notificationDto.fromUserId)
+        .filter(
+          (follower) => follower._id.toString() !== notificationDto.fromUserId,
+        )
         .map((follower) => ({
           toUserId: follower._id as string,
           fromUserId: notificationDto.toUserId,
@@ -284,7 +294,7 @@ export class NotificationListener {
       if (extractObjectId(data.toUserId) !== extractObjectId(data.fromUserId)) {
         // Determine notification content based on the notification type
         let notificationContent: string;
-        
+
         if (data.data && data.data.notificationType) {
           switch (data.data.notificationType) {
             case 'reply_to_comment':
@@ -299,14 +309,18 @@ export class NotificationListener {
             default:
               // Fallback to the old logic
               const isReply = !!(data.data && data.data.parentCommentId);
-              notificationContent = isReply ? `replied to your comment` : `commented on your post`;
+              notificationContent = isReply
+                ? `replied to your comment`
+                : `commented on your post`;
           }
         } else {
           // Fallback to the old logic if notificationType is not present
           const isReply = !!(data.data && data.data.parentCommentId);
-          notificationContent = isReply ? `replied to your comment` : `commented on your post`;
+          notificationContent = isReply
+            ? `replied to your comment`
+            : `commented on your post`;
         }
-        
+
         const notification = await this.notificationService.create({
           toUserId: extractObjectId(data.toUserId),
           fromUserId: extractObjectId(data.fromUserId),
@@ -356,7 +370,10 @@ export class NotificationListener {
     @Payload() data: CreateNotificationDto,
     @Ctx() context: RmqContext,
   ) {
-    this.debugLog('In handleMessageReceived', { toUserId: data?.toUserId, fromUserId: data?.fromUserId });
+    this.debugLog('In handleMessageReceived', {
+      toUserId: data?.toUserId,
+      fromUserId: data?.fromUserId,
+    });
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
     try {
@@ -397,7 +414,9 @@ export class NotificationListener {
         this.debugLog('Notification created', createdNotification);
       }
       channel.ack(originalMsg);
-      this.logger.log(`✅ Acknowledged comment.reaction for commentId: ${data.data?.commentId}`);
+      this.logger.log(
+        `✅ Acknowledged comment.reaction for commentId: ${data.data?.commentId}`,
+      );
     } catch (error) {
       this.logger.error(
         `❌ Failed to process comment.reaction: ${error.message}`,
@@ -414,75 +433,104 @@ export class NotificationListener {
   ) {
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
-    
+
     try {
-      this.debugLog('Processing notification.source.deleted', { type: data.type });
-      
+      this.debugLog('Processing notification.source.deleted', {
+        type: data.type,
+      });
+
       if (data.notificationId) {
         await this.notificationModel.findByIdAndDelete(data.notificationId);
-        this.logger.log(`[NOTIFICATION] Deleted notification by ID: ${data.notificationId}`);
-        this.gateway.server.to(`user:${data.toUserId}`).emit('notification:delete', {
-          notificationId: data.notificationId,
+        this.logger.log(
+          `[NOTIFICATION] Deleted notification by ID: ${data.notificationId}`,
+        );
+        this.gateway.server
+          .to(`user:${data.toUserId}`)
+          .emit('notification:delete', {
+            notificationId: data.notificationId,
+          });
+      } else if (data.type === 'USER_MENTIONED' && data.commentId) {
+        this.debugLog('Deleting USER_MENTIONED notifications', {
+          commentId: data.commentId,
         });
-      }
-      else if (data.type === 'USER_MENTIONED' && data.commentId) {
-        this.debugLog('Deleting USER_MENTIONED notifications', { commentId: data.commentId });
-        
-        const commentId = typeof data.commentId === 'object' && data.commentId._id
-          ? data.commentId._id.toString()
-          : data.commentId.toString();
-        
+
+        const commentId =
+          typeof data.commentId === 'object' && data.commentId._id
+            ? data.commentId._id.toString()
+            : data.commentId.toString();
+
         // Find mentions for this specific comment (with reasonable limit)
-        const mentionsForComment = await this.notificationModel.find({
-          type: 'USER_MENTIONED',
-          $or: [
-            { 'data.commentId': commentId },
-            { 'data._id': commentId },
-            { 'data.parentCommentId': commentId },
-          ]
-        }).limit(100).lean();
-        
-        this.debugLog(`Found ${mentionsForComment.length} USER_MENTIONED notifications for comment`, { commentId });
-        
+        const mentionsForComment = await this.notificationModel
+          .find({
+            type: 'USER_MENTIONED',
+            $or: [
+              { 'data.commentId': commentId },
+              { 'data._id': commentId },
+              { 'data.parentCommentId': commentId },
+            ],
+          })
+          .limit(100)
+          .lean();
+
+        this.debugLog(
+          `Found ${mentionsForComment.length} USER_MENTIONED notifications for comment`,
+          { commentId },
+        );
+
         // If we have the comment text, try to extract mentions and delete notifications for those users
         if (data.text) {
           const extractMentions = (text) => {
             if (!text) return [];
-            return Array.from(new Set((text.match(/@([a-zA-Z0-9_]+)/g) || []).map(m => m.slice(1))));
+            return Array.from(
+              new Set(
+                (text.match(/@([a-zA-Z0-9_]+)/g) || []).map((m) => m.slice(1)),
+              ),
+            );
           };
-          
+
           const mentions = extractMentions(data.text);
-          this.debugLog(`Extracted ${mentions.length} mentions from comment text`);
-          
+          this.debugLog(
+            `Extracted ${mentions.length} mentions from comment text`,
+          );
+
           if (mentions.length > 0) {
             try {
               // Find users by usernames
-              const users = await this.userService.findByUsernames(mentions as string[]);
+              const users = await this.userService.findByUsernames(
+                mentions as string[],
+              );
               this.debugLog(`Found ${users.length} mentioned users`);
-              
+
               if (users.length > 0) {
-                const userIds = users.map(user => (user as any)._id.toString());
-                
+                const userIds = users.map((user) =>
+                  (user as any)._id.toString(),
+                );
+
                 // Delete USER_MENTIONED notifications for these specific users related to this comment
-                const mentionDeleteResult = await this.notificationModel.deleteMany({
-                  type: 'USER_MENTIONED',
-                  toUserId: { $in: userIds },
-                  $or: [
-                    { 'data.commentId': commentId },
-                    { 'data._id': commentId },
-                    { 'data.parentCommentId': commentId },
-                    { 'data.comment._id': commentId },
-                  ]
-                });
-                
-                this.logger.log(`Deleted ${mentionDeleteResult.deletedCount} mention notifications using extracted mentions`);
-                
+                const mentionDeleteResult =
+                  await this.notificationModel.deleteMany({
+                    type: 'USER_MENTIONED',
+                    toUserId: { $in: userIds },
+                    $or: [
+                      { 'data.commentId': commentId },
+                      { 'data._id': commentId },
+                      { 'data.parentCommentId': commentId },
+                      { 'data.comment._id': commentId },
+                    ],
+                  });
+
+                this.logger.log(
+                  `Deleted ${mentionDeleteResult.deletedCount} mention notifications using extracted mentions`,
+                );
+
                 // Notify these users about the deletion
                 for (const userId of userIds) {
-                  this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
-                    type: 'USER_MENTIONED',
-                    commentId: commentId,
-                  });
+                  this.gateway.server
+                    .to(`user:${userId}`)
+                    .emit('notification:delete', {
+                      type: 'USER_MENTIONED',
+                      commentId: commentId,
+                    });
                 }
               }
             } catch (error) {
@@ -490,7 +538,7 @@ export class NotificationListener {
             }
           }
         }
-          
+
         // Delete all USER_MENTIONED notifications related to this comment
         const mentionedDeleted = await this.notificationModel.deleteMany({
           type: 'USER_MENTIONED',
@@ -501,16 +549,20 @@ export class NotificationListener {
             { 'data.comment._id': commentId },
           ],
         });
-        
-        this.logger.log(`USER_MENTIONED deleted count: ${mentionedDeleted.deletedCount}`);
-      }
-      else if (data.type === 'USER_MENTIONED' && data.postId) {
-        this.debugLog('Deleting USER_MENTIONED notifications for post', { postId: data.postId });
-        
-        const postId = typeof data.postId === 'object' && data.postId._id
-          ? data.postId._id.toString()
-          : data.postId.toString();
-        
+
+        this.logger.log(
+          `USER_MENTIONED deleted count: ${mentionedDeleted.deletedCount}`,
+        );
+      } else if (data.type === 'USER_MENTIONED' && data.postId) {
+        this.debugLog('Deleting USER_MENTIONED notifications for post', {
+          postId: data.postId,
+        });
+
+        const postId =
+          typeof data.postId === 'object' && data.postId._id
+            ? data.postId._id.toString()
+            : data.postId.toString();
+
         // Simple deletion without extensive debugging
         const mentionedDeleted = await this.notificationModel.deleteMany({
           type: 'USER_MENTIONED',
@@ -520,56 +572,76 @@ export class NotificationListener {
             { 'data.post._id': postId },
           ],
         });
-        
-        this.logger.log(`Deleted ${mentionedDeleted.deletedCount} mention notifications for post ${postId}`);
-      }
-      else if (data.type === 'COMMENT_REACTION') {
-        this.debugLog('Deleting COMMENT_REACTION notifications', { commentId: data.commentId });
-        
-        const commentId = typeof data.commentId === 'object' && data.commentId._id
-          ? data.commentId._id.toString()
-          : data.commentId.toString();
-        
-        // Find relevant reactions (with reasonable limit)
-        const reactionNotifications = await this.notificationModel.find({
-          type: 'COMMENT_REACTION'
-        }).limit(1000).lean();
-        
-        const relevantReactions = reactionNotifications.filter(notification => {
-          if (!notification.data) return false;
-          return (
-            (notification.data.commentId && notification.data.commentId.toString() === commentId) ||
-            (notification.data._id && notification.data._id.toString() === commentId) ||
-            (notification.data.comment && notification.data.comment._id && 
-             notification.data.comment._id.toString() === commentId)
-          );
+
+        this.logger.log(
+          `Deleted ${mentionedDeleted.deletedCount} mention notifications for post ${postId}`,
+        );
+      } else if (data.type === 'COMMENT_REACTION') {
+        this.debugLog('Deleting COMMENT_REACTION notifications', {
+          commentId: data.commentId,
         });
-        
-        this.debugLog(`Found ${relevantReactions.length} relevant COMMENT_REACTION notifications`);
-        
+
+        const commentId =
+          typeof data.commentId === 'object' && data.commentId._id
+            ? data.commentId._id.toString()
+            : data.commentId.toString();
+
+        // Find relevant reactions (with reasonable limit)
+        const reactionNotifications = await this.notificationModel
+          .find({
+            type: 'COMMENT_REACTION',
+          })
+          .limit(1000)
+          .lean();
+
+        const relevantReactions = reactionNotifications.filter(
+          (notification) => {
+            if (!notification.data) return false;
+            return (
+              (notification.data.commentId &&
+                notification.data.commentId.toString() === commentId) ||
+              (notification.data._id &&
+                notification.data._id.toString() === commentId) ||
+              (notification.data.comment &&
+                notification.data.comment._id &&
+                notification.data.comment._id.toString() === commentId)
+            );
+          },
+        );
+
+        this.debugLog(
+          `Found ${relevantReactions.length} relevant COMMENT_REACTION notifications`,
+        );
+
         if (relevantReactions.length > 0) {
-          const reactionIds = relevantReactions.map(r => r._id);
+          const reactionIds = relevantReactions.map((r) => r._id);
           const deletedResult = await this.notificationModel.deleteMany({
-            _id: { $in: reactionIds }
+            _id: { $in: reactionIds },
           });
-          
-          this.logger.log(`Deleted ${deletedResult.deletedCount} COMMENT_REACTION notifications for comment ${commentId}`);
-          
+
+          this.logger.log(
+            `Deleted ${deletedResult.deletedCount} COMMENT_REACTION notifications for comment ${commentId}`,
+          );
+
           // Notify affected users
-          const affectedUsers = new Set(relevantReactions.map(r => r.toUserId.toString()));
+          const affectedUsers = new Set(
+            relevantReactions.map((r) => r.toUserId.toString()),
+          );
           for (const userId of affectedUsers) {
-            this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
-              type: 'COMMENT_REACTION',
-              commentId: commentId,
-            });
+            this.gateway.server
+              .to(`user:${userId}`)
+              .emit('notification:delete', {
+                type: 'COMMENT_REACTION',
+                commentId: commentId,
+              });
           }
         }
-      }
-      else if (data.type === 'POST_REACTION' && data.postId) {
-        const postId = typeof data.postId === 'object' && data.postId._id
-          ? data.postId._id.toString()
-          : data.postId.toString();
-        
+      } else if (data.type === 'POST_REACTION' && data.postId) {
+        const postId =
+          typeof data.postId === 'object' && data.postId._id
+            ? data.postId._id.toString()
+            : data.postId.toString();
+
         const deletedNotifications = await this.notificationModel.deleteMany({
           toUserId: data.toUserId,
           fromUserId: data.fromUserId,
@@ -577,51 +649,66 @@ export class NotificationListener {
           'data.postId': postId,
         });
 
-        this.logger.log(`Deleted ${deletedNotifications.deletedCount} post reaction notifications`);
+        this.logger.log(
+          `Deleted ${deletedNotifications.deletedCount} post reaction notifications`,
+        );
 
-        this.gateway.server.to(`user:${data.toUserId}`).emit('notification:delete', {
-          type: 'POST_REACTION',
-          postId: postId,
-        });
-      }
-      else if (data.type === 'FOLLOWED_USER' && data.followId) {
+        this.gateway.server
+          .to(`user:${data.toUserId}`)
+          .emit('notification:delete', {
+            type: 'POST_REACTION',
+            postId: postId,
+          });
+      } else if (data.type === 'FOLLOWED_USER' && data.followId) {
         const deletedNotifications = await this.notificationModel.deleteMany({
           toUserId: data.toUserId,
           type: 'FOLLOWED_USER',
           'data.followerId': data.followId,
         });
 
-        this.logger.log(`Deleted ${deletedNotifications.deletedCount} follow notifications`);
+        this.logger.log(
+          `Deleted ${deletedNotifications.deletedCount} follow notifications`,
+        );
 
-        this.gateway.server.to(`user:${data.toUserId}`).emit('notification:delete', {
-          type: 'FOLLOWED_USER',
-          followId: data.followId,
+        this.gateway.server
+          .to(`user:${data.toUserId}`)
+          .emit('notification:delete', {
+            type: 'FOLLOWED_USER',
+            followId: data.followId,
+          });
+      } else if (data.type === 'COMMENT_ADDED' && data.commentId) {
+        this.debugLog('Deleting COMMENT_ADDED notifications', {
+          commentId: data.commentId,
+          toUserId: data.toUserId,
         });
-      }
-      else if (data.type === 'COMMENT_ADDED' && data.commentId) {
-        this.debugLog('Deleting COMMENT_ADDED notifications', { commentId: data.commentId, toUserId: data.toUserId });
-        
-        const toUserId = typeof data.toUserId === 'object' && data.toUserId._id
-          ? data.toUserId._id.toString()
-          : data.toUserId.toString();
-        const commentId = typeof data.commentId === 'object' && data.commentId._id
-          ? data.commentId._id.toString()
-          : data.commentId.toString();
-        
+
+        const toUserId =
+          typeof data.toUserId === 'object' && data.toUserId._id
+            ? data.toUserId._id.toString()
+            : data.toUserId.toString();
+        const commentId =
+          typeof data.commentId === 'object' && data.commentId._id
+            ? data.commentId._id.toString()
+            : data.commentId.toString();
+
         // Simplified deletion without extensive debugging
         const deleteQueries = [
-          { toUserId: toUserId, type: 'COMMENT_ADDED', 'data.commentId': commentId },
+          {
+            toUserId: toUserId,
+            type: 'COMMENT_ADDED',
+            'data.commentId': commentId,
+          },
           { toUserId: toUserId, type: 'COMMENT_ADDED', 'data._id': commentId },
           { type: 'COMMENT_ADDED', 'data.commentId': commentId },
           { type: 'COMMENT_ADDED', 'data._id': commentId },
         ];
-        
+
         let totalDeleted = 0;
         for (const query of deleteQueries) {
           const deletedResult = await this.notificationModel.deleteMany(query);
           totalDeleted += deletedResult.deletedCount;
         }
-        
+
         // Delete related reply notifications
         const repliesDeleted = await this.notificationModel.deleteMany({
           type: 'COMMENT_ADDED',
@@ -630,72 +717,88 @@ export class NotificationListener {
             { 'data.comment.parentCommentId': commentId },
           ],
         });
-        
+
         this.logger.log(`Total deleted comment notifications: ${totalDeleted}`);
-        this.logger.log(`Total deleted reply notifications: ${repliesDeleted.deletedCount}`);
-        
+        this.logger.log(
+          `Total deleted reply notifications: ${repliesDeleted.deletedCount}`,
+        );
+
         // Send delete events
         this.gateway.server.to(`user:${toUserId}`).emit('notification:delete', {
           type: 'COMMENT_ADDED',
           commentId: commentId,
         });
-        
+
         if (repliesDeleted.deletedCount > 0) {
           this.gateway.server.emit('notification:delete', {
             type: 'COMMENT_ADDED',
             commentId: commentId,
           });
         }
-      }
-      else if (data.type === 'POST' && data.postId) {
+      } else if (data.type === 'POST' && data.postId) {
         this.debugLog('Deleting POST notifications', { postId: data.postId });
-        
-        const postId = typeof data.postId === 'object' && data.postId._id
-          ? data.postId._id.toString()
-          : data.postId.toString();
-        
+
+        const postId =
+          typeof data.postId === 'object' && data.postId._id
+            ? data.postId._id.toString()
+            : data.postId.toString();
+
         try {
           const deleteQuery = {
             $or: [
               { 'data.postId': postId },
               { 'data._id': postId },
               { 'data.post._id': postId },
-            ]
+            ],
           };
-          
+
           // Get affected users before deletion
-          const affectedNotifications = await this.notificationModel.find(deleteQuery)
+          const affectedNotifications = await this.notificationModel
+            .find(deleteQuery)
             .select('toUserId')
             .limit(1000)
             .lean();
-          
+
           const affectedUsers = new Set<string>();
-          affectedNotifications.forEach(n => affectedUsers.add(n.toUserId.toString()));
-          
+          affectedNotifications.forEach((n) =>
+            affectedUsers.add(n.toUserId.toString()),
+          );
+
           // Delete notifications
-          const deletedResult = await this.notificationModel.deleteMany(deleteQuery);
+          const deletedResult =
+            await this.notificationModel.deleteMany(deleteQuery);
           const totalDeleted = deletedResult.deletedCount;
 
-          this.logger.log(`Deleted ${totalDeleted} notifications for post: ${postId}`);
+          this.logger.log(
+            `Deleted ${totalDeleted} notifications for post: ${postId}`,
+          );
           this.logger.log(`Affected users: ${affectedUsers.size}`);
-          
+
           // Send delete events to affected users
           for (const userId of affectedUsers) {
-            this.gateway.server.to(`user:${userId}`).emit('notification:delete', {
-              type: 'POST',
-              postId: postId,
-              affectedTypes: ['POST_CREATED', 'POST_REACTION', 'COMMENT_ADDED', 'COMMENT_REACTION', 'USER_MENTIONED']
-            });
+            this.gateway.server
+              .to(`user:${userId}`)
+              .emit('notification:delete', {
+                type: 'POST',
+                postId: postId,
+                affectedTypes: [
+                  'POST_CREATED',
+                  'POST_REACTION',
+                  'COMMENT_ADDED',
+                  'COMMENT_REACTION',
+                  'USER_MENTIONED',
+                ],
+              });
           }
-
         } catch (err) {
           this.logger.error('Error deleting notifications for post:', err);
         }
       }
 
-      this.logger.log(`✅ Successfully processed notification.source.deleted for type: ${data.type}`);
+      this.logger.log(
+        `✅ Successfully processed notification.source.deleted for type: ${data.type}`,
+      );
       channel.ack(originalMsg);
-
     } catch (error) {
       this.logger.error(
         `❌ Failed to process notification.source.deleted: ${error.message}`,
@@ -711,9 +814,15 @@ export class NotificationListener {
     @Ctx() context: RmqContext,
   ) {
     this.logger.log('🔥🔥🔥 Mention handler started', data);
-    console.log('[DEBUG] Mention data structure:', JSON.stringify(data, null, 2));
-    console.log('[DEBUG] Mention data.data:', JSON.stringify(data.data, null, 2));
-    
+    console.log(
+      '[DEBUG] Mention data structure:',
+      JSON.stringify(data, null, 2),
+    );
+    console.log(
+      '[DEBUG] Mention data.data:',
+      JSON.stringify(data.data, null, 2),
+    );
+
     const channel = context.getChannelRef();
     const originalMsg = context.getMessage();
     try {
@@ -770,19 +879,25 @@ export class NotificationListener {
         return;
       }
 
-      const updatedNotification = await this.notificationModel.findByIdAndUpdate(
-        notificationId,
-        { $set: data },
-        { new: true },
-      );
+      const updatedNotification =
+        await this.notificationModel.findByIdAndUpdate(
+          notificationId,
+          { $set: data },
+          { new: true },
+        );
 
       if (updatedNotification) {
         this.logger.log(`💾 Notification updated: ${updatedNotification._id}`);
-        this.gateway.server.to(`user:${updatedNotification.toUserId}`).emit('notification:update', {
-          notification: updatedNotification,
-        });
+        this.gateway.server
+          .to(`user:${updatedNotification.toUserId}`)
+          .emit('notification:update', {
+            notification: updatedNotification,
+          });
       } else {
-        this.logger.warn(`Notification with ID ${notificationId} not found for update`, data);
+        this.logger.warn(
+          `Notification with ID ${notificationId} not found for update`,
+          data,
+        );
       }
       channel.ack(originalMsg);
       this.logger.log(`✅ Acknowledged notification.update for`, data);

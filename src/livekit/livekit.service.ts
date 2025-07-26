@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Inject,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -10,6 +11,8 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { generateUniqueSecretId } from './utils/secret-id.util';
 import { ConfigService } from '@nestjs/config';
+import { User, UserDocument } from 'src/users/shemas/user.schema';
+import { ClientProxy } from '@nestjs/microservices';
 
 @Injectable()
 export class LivekitService {
@@ -17,6 +20,7 @@ export class LivekitService {
     @InjectModel(LivekitRoom.name)
     private readonly roomModel: Model<LivekitRoomDocument>,
     private readonly configService: ConfigService,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
   async createRoom(
@@ -33,14 +37,29 @@ export class LivekitService {
         'LIVEKIT_MAX_PARTICIPANTS',
         10,
       );
+      const invitedUsers = createRoomDto.isPrivate
+        ? createRoomDto.invitedUsers?.map((user) => new Types.ObjectId(user)) ||
+          []
+        : [];
 
+      if (invitedUsers.length > 0) {
+        const validUsers = await this.userModel.countDocuments({
+          _id: { $in: invitedUsers },
+        });
+        if (validUsers !== invitedUsers.length) {
+          console.error(`Invalid invited users: ${invitedUsers}`);
+          throw new NotFoundException('One or more invited users not found');
+        }
+      }
       const room = new this.roomModel({
         ...createRoomDto,
         secretId,
         maxParticipants: createRoomDto.maxParticipants || maxParticipants,
         createdBy: new Types.ObjectId(userId),
+        invitedUsers,
       });
       const savedRoom = await room.save();
+      console.log('Room saved:', savedRoom);
       return { ...savedRoom.toObject(), secretId: savedRoom.secretId };
     } catch (error) {
       if (error.code === 11000 && error.keyPattern?.name) {
@@ -91,9 +110,24 @@ export class LivekitService {
         'Only the room creator can update this room',
       );
     }
+    const invitedUsers = updateRoomDto.isPrivate
+      ? updateRoomDto.invitedUsers?.map((id) => new Types.ObjectId(id)) || []
+      : [];
 
+    if (invitedUsers.length > 0) {
+      const validUsers = await this.userModel.countDocuments({
+        _id: { $in: invitedUsers },
+      });
+      if (validUsers !== invitedUsers.length) {
+        throw new NotFoundException('One or more invited users not found');
+      }
+    }
+    const updatedData = {
+      ...updateRoomDto,
+      invitedUsers,
+    };
     const updatedRoom = await this.roomModel
-      .findByIdAndUpdate(id, updateRoomDto, { new: true })
+      .findByIdAndUpdate(id, updatedData, { new: true })
       .populate('createdBy', 'username firstName lastName')
       .select('-secretId')
       .exec();

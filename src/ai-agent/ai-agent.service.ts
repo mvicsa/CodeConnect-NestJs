@@ -93,7 +93,8 @@ export class AiAgentService {
     evaluationRequest: CommentEvaluationRequestDto,
   ): Promise<string> {
     try {
-      const { postText, postCode, commentText, commentCode, language } = evaluationRequest;
+      const { postText, postCode, commentText, commentCode, language } =
+        evaluationRequest;
       const response = await this.openai.chat.completions.create({
         model: this.aiConfig.model,
         temperature: Number(this.aiConfig.temperature),
@@ -107,13 +108,13 @@ export class AiAgentService {
 - If the answer uses the correct function, method, or approach, but is missing arguments, details, or has minor mistakes, reply ONLY with: I agree with you, but... and then explain what is missing or could be improved, even if the answer is not fully correct.
 - If the answer is incorrect, reply ONLY with: Incorrect Answer. Then, explain what is wrong and provide suggestions or corrections.
 - For example, if the question is about console.log("Hello") and the answer is console.log(), reply: I agree with you, but... you need to provide the value to log, e.g., console.log("Hello").
-- Be concise and clear. Do not repeat the question or answer in your reply.`
+- Be concise and clear. Do not repeat the question or answer in your reply.`,
           },
           {
             role: 'user',
-            content: `POST (Question):\nText: ${postText}\n\nCode:\n\u0060\u0060\u0060${language}\n${postCode}\n\u0060\u0060\u0060\n\nCOMMENT (Answer):\nText: ${commentText}\n\nCode:\n\u0060\u0060\u0060${language}\n${commentCode}\n\u0060\u0060\u0060`
-          }
-        ]
+            content: `POST (Question):\nText: ${postText}\n\nCode:\n\u0060\u0060\u0060${language}\n${postCode}\n\u0060\u0060\u0060\n\nCOMMENT (Answer):\nText: ${commentText}\n\nCode:\n\u0060\u0060\u0060${language}\n${commentCode}\n\u0060\u0060\u0060`,
+          },
+        ],
       });
       return response.choices[0]?.message?.content || 'No evaluation available';
     } catch (error) {

@@ -33,7 +33,9 @@ export class UsersService {
 
   async findByUsernames(usernames: string[]): Promise<User[]> {
     if (!usernames || usernames.length === 0) return [];
-    return this.userModel.find({ username: { $in: usernames } }).select('_id username firstName lastName avatar');
+    return this.userModel
+      .find({ username: { $in: usernames } })
+      .select('_id username firstName lastName avatar');
   }
 
   async followUser(userId: string, targetUserId: string) {
@@ -120,6 +122,8 @@ export class UsersService {
   }
 
   async getUserById(userId: string) {
-    return this.userModel.findById(userId).select('username firstName lastName');
+    return this.userModel
+      .findById(userId)
+      .select('username firstName lastName');
   }
 }

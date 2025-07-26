@@ -7,6 +7,7 @@ import {
   IsNumber,
   Min,
   Max,
+  IsArray,
 } from 'class-validator';
 
 export class CreateRoomDto {
@@ -42,4 +43,14 @@ export class CreateRoomDto {
   @Min(1)
   @Max(50)
   maxParticipants?: number;
+
+  @ApiProperty({
+    description: 'Array of user IDs to invite to the room',
+    example: ['userId1', 'userId2'],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true }) // Ensure each element is a string
+  invitedUsers?: string[];
 }

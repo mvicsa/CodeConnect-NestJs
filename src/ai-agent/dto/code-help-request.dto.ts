@@ -30,7 +30,7 @@ export class CodeHelpRequestDto {
 export class CommentEvaluationRequestDto {
   @ApiProperty({
     description: 'The question text from the post',
-    example: 'How do I reverse a string in Python?'
+    example: 'How do I reverse a string in Python?',
   })
   @IsNotEmpty()
   @IsString()
@@ -38,7 +38,7 @@ export class CommentEvaluationRequestDto {
 
   @ApiProperty({
     description: 'The code snippet from the post (question)',
-    example: 'def reverse_string(s):\n    return s[::-1]'
+    example: 'def reverse_string(s):\n    return s[::-1]',
   })
   @IsNotEmpty()
   @IsString()
@@ -46,7 +46,7 @@ export class CommentEvaluationRequestDto {
 
   @ApiProperty({
     description: 'The answer text from the comment',
-    example: 'You can use slicing to reverse a string.'
+    example: 'You can use slicing to reverse a string.',
   })
   @IsNotEmpty()
   @IsString()
@@ -54,7 +54,7 @@ export class CommentEvaluationRequestDto {
 
   @ApiProperty({
     description: 'The code snippet from the comment (answer)',
-    example: 'def reverse_string(s):\n    return s[::-1]'
+    example: 'def reverse_string(s):\n    return s[::-1]',
   })
   @IsNotEmpty()
   @IsString()
