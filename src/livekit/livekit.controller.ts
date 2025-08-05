@@ -32,6 +32,7 @@ import {
 import { LivekitService } from './livekit.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
+import { RoomResponseDto } from './dto/room-response.dto';
 import { ConfigService } from '@nestjs/config';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -204,7 +205,7 @@ export class LivekitController {
   @ApiResponse({
     status: 201,
     description: 'Room created successfully',
-    type: LivekitRoom,
+    type: RoomResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(JwtAuthGuard)
@@ -237,7 +238,7 @@ export class LivekitController {
   @ApiResponse({
     status: 200,
     description: 'List of all rooms',
-    type: [LivekitRoom],
+    type: [RoomResponseDto],
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(JwtAuthGuard)
@@ -252,7 +253,7 @@ export class LivekitController {
     description:
       '⚠️ This module is still under development and may change in future releases.',
   })
-  @ApiResponse({ status: 200, description: 'Room details', type: LivekitRoom })
+  @ApiResponse({ status: 200, description: 'Room details', type: RoomResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Room not found' })
   @UseGuards(JwtAuthGuard)
@@ -271,7 +272,7 @@ export class LivekitController {
   @ApiResponse({
     status: 200,
     description: 'Room updated successfully',
-    type: LivekitRoom,
+    type: RoomResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
@@ -330,7 +331,7 @@ export class LivekitController {
   @ApiResponse({
     status: 200,
     description: 'List of user rooms',
-    type: [LivekitRoom],
+    type: [RoomResponseDto],
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(JwtAuthGuard)
@@ -372,7 +373,7 @@ export class LivekitController {
     description:
       '⚠️ This module is still under development and may change in future releases.',
   })
-  @ApiResponse({ status: 200, description: 'Room details', type: LivekitRoom })
+  @ApiResponse({ status: 200, description: 'Room details', type: RoomResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Room not found or inactive' })
   @UseGuards(JwtAuthGuard)
