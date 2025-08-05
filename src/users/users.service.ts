@@ -93,7 +93,7 @@ export class UsersService {
   async getFollowers(userId: string, limit = 20, skip = 0) {
     const user = await this.userModel.findById(userId).populate({
       path: 'followers',
-      select: 'username firstName lastName avatar',
+      select: 'username firstName lastName avatar email',
       options: { limit: Number(limit), skip: Number(skip) },
     });
     if (!user) throw new Error('User not found');
@@ -106,7 +106,7 @@ export class UsersService {
   async getFollowing(userId: string, limit = 20, skip = 0) {
     const user = await this.userModel.findById(userId).populate({
       path: 'following',
-      select: 'username firstName lastName avatar',
+      select: 'username firstName lastName avatar email',
       options: { limit: Number(limit), skip: Number(skip) },
     });
     if (!user) throw new Error('User not found');
@@ -136,7 +136,7 @@ export class UsersService {
   }
 
   async getUserById(userId: string) {
-    return this.userModel.findById(userId).select('username firstName lastName');
+    return this.userModel.findById(userId).select('username firstName lastName email');
     // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
 }
