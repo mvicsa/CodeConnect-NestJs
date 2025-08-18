@@ -16,9 +16,11 @@ export class LivekitRoom {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId;
 
-  @ApiProperty()
-  @Prop({ required: true, unique: true })
-  secretId: string;
+  @ApiProperty({ required: false })
+  @Prop({ required: false })
+  secretId?: string;
+
+
 
   @ApiProperty({ required: false })
   @Prop({ default: false })
@@ -39,6 +41,10 @@ export class LivekitRoom {
   @ApiProperty({ required: false, type: String })
   @Prop()
   updatedAt?: Date;
+
+  @ApiProperty({ required: false, type: String })
+  @Prop()
+  endedDate?: Date;
 
   @Prop([{ type: Types.ObjectId, ref: 'User' }]) // Reference User model explicitly
   invitedUsers: Types.ObjectId[];

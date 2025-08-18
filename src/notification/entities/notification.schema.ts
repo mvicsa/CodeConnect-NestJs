@@ -86,6 +86,7 @@ export enum NotificationType {
   LOGIN = 'LOGIN', // New: for login notifications
   USER_MENTIONED = 'USER_MENTIONED', // New: when a user is mentioned,
   ROOM_CREATED = 'ROOM_CREATED',
+  RATING_RECEIVED = 'RATING_RECEIVED', // New: when a creator receives a rating
 }
 // // Add more as needed
 // POST_SHARED = 'POST_SHARED', // New: when a post is shared
