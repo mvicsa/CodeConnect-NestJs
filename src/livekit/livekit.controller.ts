@@ -947,11 +947,6 @@ export class LivekitController {
       );
     }
     
-    // Clear public rooms cache to ensure fresh participant data
-    if (!room.isPrivate) {
-      this.livekitService.clearPublicRoomsCache();
-    }
-    
     return await this.livekitService.findRoomBySecretId(secretId);
   }
 
@@ -976,9 +971,6 @@ export class LivekitController {
     
     // For public rooms, no invitation check is needed
     const result = await this.livekitService.joinPublicRoomById(roomId);
-    
-    // Clear public rooms cache to ensure fresh participant data
-    this.livekitService.clearPublicRoomsCache();
     
     return result;
   }
@@ -1392,9 +1384,6 @@ export class LivekitController {
           });
           console.log('Room status updated successfully in database');
           
-          // Clear public rooms cache to ensure fresh data
-          this.livekitService.clearPublicRoomsCache();
-
          // Mark all participants as inactive and set their leave time
          console.log('Updating session participants...');
          const session = await this.sessionModel.findOne({ roomId: room._id });
@@ -1459,9 +1448,6 @@ export class LivekitController {
 
          });
          
-         // Clear public rooms cache to ensure fresh data
-         this.livekitService.clearPublicRoomsCache();
-
          // Mark all participants as inactive and set their leave time
          const session = await this.sessionModel.findOne({ roomId: room._id });
          if (session) {
@@ -1529,9 +1515,6 @@ export class LivekitController {
          participant.isActive = false;
          participant.leftAt = new Date();
          await session.save();
-         
-         // Clear public rooms cache to ensure fresh participant data
-         this.livekitService.clearPublicRoomsCache();
        }
 
        return {
