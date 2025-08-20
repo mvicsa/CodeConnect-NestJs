@@ -9,6 +9,7 @@ import {
   UseGuards,
   Query,
   Patch,
+  BadRequestException,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import {
@@ -217,6 +218,56 @@ export class UsersController {
     return this.usersService.updateUser(userId, updateUserDto);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('email/:email')
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Get user by email address',
+    description: 'Retrieve a user profile using their email address. Requires authentication.'
+  })
+  @ApiOkResponse({ 
+    description: 'User profile returned by email.',
+    schema: {
+      type: 'object',
+      properties: {
+        _id: { type: 'string', example: '507f1f77bcf86cd799439011' },
+        username: { type: 'string', example: 'johndoe' },
+        firstName: { type: 'string', example: 'John' },
+        lastName: { type: 'string', example: 'Doe' },
+        email: { type: 'string', example: 'john@example.com' },
+        avatar: { type: 'string', example: 'https://example.com/avatar.jpg' },
+        cover: { type: 'string', example: 'https://example.com/cover.jpg' },
+        bio: { type: 'string', example: 'Software developer' },
+        followers: { type: 'array', items: { type: 'string' } },
+        following: { type: 'array', items: { type: 'string' } },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' }
+      }
+    }
+  })
+  @ApiNotFoundResponse({ description: 'User not found.' })
+  @ApiBadRequestResponse({ description: 'Invalid email format.' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized - JWT token required.' })
+  @ApiParam({
+    name: 'email',
+    type: String,
+    description: 'Email address to search for',
+    example: 'user@example.com'
+  })
+  async getUserByEmail(@Param('email') email: string) {
+    if (!email || typeof email !== 'string') {
+      throw new BadRequestException('Invalid email address.');
+    }
+    
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new BadRequestException('Invalid email format.');
+    }
+    
+    return this.usersService.findByEmail(email);
+  }
+
   @Get(':username')
   @ApiOkResponse({ description: 'Public user profile returned.' })
   @ApiNotFoundResponse({ description: 'User not found.' })
@@ -230,7 +281,22 @@ export class UsersController {
 
   @Get()
   @ApiOkResponse({ description: 'List of all users returned.' })
-  async getAllUsers() {
+  @ApiQuery({
+    name: 'email',
+    required: false,
+    type: String,
+    description: 'Email to search for a specific user',
+    example: 'user@example.com'
+  })
+  async getAllUsers(@Query('email') email?: string) {
+    if (email) {
+      // Basic email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        throw new BadRequestException('Invalid email format.');
+      }
+      return this.usersService.findByEmail(email);
+    }
     return this.usersService.findAll();
   }
 }

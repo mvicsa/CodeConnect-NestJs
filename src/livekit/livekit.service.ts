@@ -9,33 +9,61 @@ import { Model, Types } from 'mongoose';
 import { LivekitRoom, LivekitRoomDocument } from './room.schema';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
-import { generateUniqueSecretId } from './utils/secret-id.util';
+import { generateUniqueSecretId, generateUniquePublicId } from './utils/secret-id.util';
 import { ConfigService } from '@nestjs/config';
 import { User, UserDocument } from 'src/users/shemas/user.schema';
+import { LivekitSession, LivekitSessionDocument } from './session.schema';
 
 @Injectable()
 export class LivekitService {
+  private publicRoomsCache: { data: any[], timestamp: number } | null = null;
+  private readonly CACHE_DURATION = 30000; // 30 seconds cache (increased to reduce calls)
+  private lastCallTime: number = 0;
+  private readonly MIN_CALL_INTERVAL = 1000; // 1 second minimum between calls
+
   constructor(
     @InjectModel(LivekitRoom.name)
     private readonly roomModel: Model<LivekitRoomDocument>,
+    @InjectModel(LivekitSession.name)
+    private readonly sessionModel: Model<LivekitSessionDocument>,
     private readonly configService: ConfigService,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-  ) {}
+  ) {
+    // Fix the MongoDB index issue on startup
+    this.fixMongoIndexes();
+  }
+
+  private async fixMongoIndexes() {
+    try {
+      // Drop the problematic unique index on secretId
+      await this.roomModel.collection.dropIndex('secretId_1');
+      console.log('✅ Dropped problematic secretId unique index');
+    } catch (error) {
+      // Index might not exist, that's fine
+      console.log('ℹ️ secretId index already removed or doesn\'t exist');
+    }
+  }
 
   async createRoom(
     createRoomDto: CreateRoomDto,
     userId: string,
-  ): Promise<LivekitRoom & { secretId: string }> {
+  ): Promise<LivekitRoom & { secretId?: string }> {
     try {
-      const secretIdLength = this.configService.get<number>(
-        'LIVEKIT_SECRET_ID_LENGTH',
-        16,
-      );
-      const secretId = generateUniqueSecretId(secretIdLength);
       const maxParticipants = this.configService.get<number>(
         'LIVEKIT_MAX_PARTICIPANTS',
         10,
       );
+      
+      let secretId: string | undefined;
+      
+      // Only generate secretId for private rooms
+      if (createRoomDto.isPrivate) {
+        const secretIdLength = this.configService.get<number>(
+          'LIVEKIT_SECRET_ID_LENGTH',
+          16,
+        );
+        secretId = generateUniqueSecretId(secretIdLength);
+      }
       
       // Start with the provided invited users - handle both user IDs and email addresses
       let invitedUsers: Types.ObjectId[] = [];
@@ -93,24 +121,46 @@ export class LivekitService {
           throw new NotFoundException('One or more invited users not found');
         }
       }
-             console.log('Creating room with data:', {
-         ...createRoomDto,
-         secretId,
-         maxParticipants: createRoomDto.maxParticipants || maxParticipants,
-         createdBy: new Types.ObjectId(userId),
-         invitedUsers,
-       });
-       const room = new this.roomModel({
-         ...createRoomDto,
-         secretId,
-         maxParticipants: createRoomDto.maxParticipants || maxParticipants,
-         createdBy: new Types.ObjectId(userId),
-         invitedUsers,
-       });
-       const savedRoom = await room.save();
-       console.log('Room saved successfully:', savedRoom);
-      return { ...savedRoom.toObject(), secretId: savedRoom.secretId };
+                           const roomData: any = {
+        ...createRoomDto,
+        maxParticipants: createRoomDto.maxParticipants || maxParticipants,
+        createdBy: new Types.ObjectId(userId),
+        invitedUsers,
+        totalParticipantsJoined: 0,
+        currentActiveParticipants: 0,
+        peakParticipants: 0,
+      };
+      
+      // Convert scheduledStartTime from string to Date if provided
+      if (createRoomDto.scheduledStartTime) {
+        roomData.scheduledStartTime = new Date(createRoomDto.scheduledStartTime);
+      }
+      
+      // Only add secretId if it exists (for private rooms)
+      if (secretId && typeof secretId === 'string') {
+        roomData.secretId = secretId;
+      }
+      console.log('Creating room with data:', roomData);
+      
+      const room = new this.roomModel(roomData);
+      console.log('Room model created, attempting to save...');
+      
+      const savedRoom = await room.save();
+      console.log('Room saved successfully:', savedRoom);
+      
+      // Clear public rooms cache if this is a public room
+      if (!savedRoom.isPrivate) {
+        this.clearPublicRoomsCache();
+      }
+        
+      // Return secretId only for private rooms
+      if (savedRoom.isPrivate) {
+        return { ...savedRoom.toObject(), secretId: savedRoom.secretId };
+      } else {
+        return savedRoom.toObject();
+      }
     } catch (error) {
+      console.error('Error in createRoom service:', error);
       if (error.code === 11000 && error.keyPattern?.name) {
         throw new Error(
           'A room with this name already exists. Please choose a different name.',
@@ -123,21 +173,33 @@ export class LivekitService {
   async findAllRooms(): Promise<Omit<LivekitRoom, 'secretId'>[]> {
     const rooms = await this.roomModel
       .find({ isActive: true })
-      .populate('createdBy', 'username firstName lastName')
+      .populate('createdBy', 'username firstName lastName email avatar')
       .select('-secretId')
       .exec();
     
-    // Manually populate invited users
+    // Manually populate invited users and calculate real participant counts
     for (const room of rooms) {
       if (room.invitedUsers && room.invitedUsers.length > 0) {
         const userIds = room.invitedUsers.map(id => id.toString());
         const users = await this.userModel
           .find({ _id: { $in: userIds } })
-          .select('username firstName lastName email')
+          .select('username firstName lastName email avatar')
           .exec();
         
         // Replace ObjectIds with user objects
         room.invitedUsers = users as any;
+      }
+      
+      // Calculate real participant counts from session data
+      const session = await this.sessionModel.findOne({ roomId: room._id });
+      if (session) {
+        room.totalParticipantsJoined = session.participants.length;
+        room.currentActiveParticipants = session.participants.filter(p => p.isActive).length;
+        room.peakParticipants = Math.max(room.peakParticipants || 0, room.currentActiveParticipants);
+      } else {
+        room.totalParticipantsJoined = 0;
+        room.currentActiveParticipants = 0;
+        room.peakParticipants = 0;
       }
     }
     
@@ -147,7 +209,7 @@ export class LivekitService {
   async findRoomById(id: string): Promise<Omit<LivekitRoom, 'secretId'>> {
     const room = await this.roomModel
       .findById(id)
-      .populate('createdBy', 'username firstName lastName')
+      .populate('createdBy', 'username firstName lastName email avatar')
       .select('-secretId')
       .exec();
 
@@ -160,11 +222,23 @@ export class LivekitService {
       const userIds = room.invitedUsers.map(id => id.toString());
       const users = await this.userModel
         .find({ _id: { $in: userIds } })
-        .select('username firstName lastName email')
+        .select('username firstName lastName email avatar')
         .exec();
       
       // Replace ObjectIds with user objects
       room.invitedUsers = users as any;
+    }
+
+    // Calculate real participant counts from session data
+    const session = await this.sessionModel.findOne({ roomId: room._id });
+    if (session) {
+      room.totalParticipantsJoined = session.participants.length;
+      room.currentActiveParticipants = session.participants.filter(p => p.isActive).length;
+      room.peakParticipants = Math.max(room.peakParticipants || 0, room.currentActiveParticipants);
+    } else {
+      room.totalParticipantsJoined = 0;
+      room.currentActiveParticipants = 0;
+      room.peakParticipants = 0;
     }
 
     return room;
@@ -230,13 +304,30 @@ export class LivekitService {
         throw new NotFoundException('One or more invited users not found');
       }
     }
-    const updatedData = {
+    const updatedData: any = {
       ...updateRoomDto,
       invitedUsers,
     };
+    
+    // Convert scheduledStartTime from string to Date if provided
+    if (updateRoomDto.scheduledStartTime) {
+      updatedData.scheduledStartTime = new Date(updateRoomDto.scheduledStartTime);
+    }
+    
+    // Ensure participant count fields exist
+    if (updatedData.totalParticipantsJoined === undefined) {
+      updatedData.totalParticipantsJoined = 0;
+    }
+    if (updatedData.currentActiveParticipants === undefined) {
+      updatedData.currentActiveParticipants = 0;
+    }
+    if (updatedData.peakParticipants === undefined) {
+      updatedData.peakParticipants = 0;
+    }
+
     const updatedRoom = await this.roomModel
       .findByIdAndUpdate(id, updatedData, { new: true })
-      .populate('createdBy', 'username firstName lastName')
+      .populate('createdBy', 'username firstName lastName email avatar')
       .select('-secretId')
       .exec();
 
@@ -244,16 +335,33 @@ export class LivekitService {
       throw new NotFoundException('Room not found after update');
     }
 
+    // Clear public rooms cache if privacy status or active status changed
+    if (updatedRoom.isPrivate !== room.isPrivate || updatedRoom.isActive !== room.isActive) {
+      this.clearPublicRoomsCache();
+    }
+
     // Manually populate invited users
     if (updatedRoom.invitedUsers && updatedRoom.invitedUsers.length > 0) {
       const userIds = updatedRoom.invitedUsers.map(id => id.toString());
       const users = await this.userModel
         .find({ _id: { $in: userIds } })
-        .select('username firstName lastName email')
+        .select('username firstName lastName email avatar')
         .exec();
       
       // Replace ObjectIds with user objects
       updatedRoom.invitedUsers = users as any;
+    }
+
+    // Calculate real participant counts from session data
+    const session = await this.sessionModel.findOne({ roomId: updatedRoom._id });
+    if (session) {
+      updatedRoom.totalParticipantsJoined = session.participants.length;
+      updatedRoom.currentActiveParticipants = session.participants.filter(p => p.isActive).length;
+      updatedRoom.peakParticipants = Math.max(updatedRoom.peakParticipants || 0, updatedRoom.currentActiveParticipants);
+    } else {
+      updatedRoom.totalParticipantsJoined = 0;
+      updatedRoom.currentActiveParticipants = 0;
+      updatedRoom.peakParticipants = 0;
     }
 
     return updatedRoom;
@@ -273,7 +381,14 @@ export class LivekitService {
       );
     }
 
+    // Delete the room
     await this.roomModel.findByIdAndDelete(id);
+    
+    // Clear public rooms cache to ensure fresh data
+    this.clearPublicRoomsCache();
+    
+    // Also delete related sessions
+    await this.sessionModel.deleteMany({ roomId: id });
   }
 
   async findRoomsByUser(
@@ -281,7 +396,7 @@ export class LivekitService {
   ): Promise<Omit<LivekitRoom, 'secretId'>[]> {
     const rooms = await this.roomModel
       .find({ createdBy: new Types.ObjectId(userId), isActive: true })
-      .populate('createdBy', 'username firstName lastName')
+      .populate('createdBy', 'username firstName lastName email avatar')
       .select('-secretId')
       .exec();
     
@@ -297,6 +412,18 @@ export class LivekitService {
         // Replace ObjectIds with user objects
         room.invitedUsers = users as any;
       }
+      
+      // Calculate real participant counts from session data
+      const session = await this.sessionModel.findOne({ roomId: room._id });
+      if (session) {
+        room.totalParticipantsJoined = session.participants.length;
+        room.currentActiveParticipants = session.participants.filter(p => p.isActive).length;
+        room.peakParticipants = Math.max(room.peakParticipants || 0, room.currentActiveParticipants);
+      } else {
+        room.totalParticipantsJoined = 0;
+        room.currentActiveParticipants = 0;
+        room.peakParticipants = 0;
+      }
     }
     
     return rooms;
@@ -307,7 +434,7 @@ export class LivekitService {
   ): Promise<Omit<LivekitRoomDocument, 'secretId'>> {
     const room = await this.roomModel
       .findOne({ secretId, isActive: true })
-      .populate('createdBy', 'username firstName lastName')
+      .populate('createdBy', 'username firstName lastName email avatar')
       .select('-secretId')
       .exec();
 
@@ -320,7 +447,7 @@ export class LivekitService {
       const userIds = room.invitedUsers.map(id => id.toString());
       const users = await this.userModel
         .find({ _id: { $in: userIds } })
-        .select('username firstName lastName email')
+        .select('username firstName lastName email avatar')
         .exec();
       
       // Replace ObjectIds with user objects
@@ -338,7 +465,7 @@ export class LivekitService {
 
       const room = await this.roomModel
         .findOne({ secretId, isActive: true })
-        .populate('createdBy', 'username firstName lastName')
+        .populate('createdBy', 'username firstName lastName email avatar')
         .exec();
 
       console.log(
@@ -374,6 +501,159 @@ export class LivekitService {
       );
     }
 
+    if (!room.secretId) {
+      throw new NotFoundException('This room does not have a secret ID');
+    }
+
     return { secretId: room.secretId };
   }
+
+
+
+  async joinPublicRoomById(
+    roomId: string,
+  ): Promise<Omit<LivekitRoom, 'secretId'>> {
+    const room = await this.roomModel
+      .findById(roomId)
+      .populate('createdBy', 'username firstName lastName email avatar')
+      .select('-secretId')
+      .exec();
+
+    if (!room) {
+      throw new NotFoundException('Room not found');
+    }
+
+    if (room.isPrivate) {
+      throw new ForbiddenException('This room is private and requires an invitation');
+    }
+
+    if (!room.isActive) {
+      throw new NotFoundException('Room is not active');
+    }
+
+    // Manually populate invited users
+    if (room.invitedUsers && room.invitedUsers.length > 0) {
+      const userIds = room.invitedUsers.map(id => id.toString());
+      const users = await this.userModel
+        .find({ _id: { $in: userIds } })
+        .select('username firstName lastName email avatar')
+        .exec();
+      
+      // Replace ObjectIds with user objects
+      room.invitedUsers = users as any;
+    }
+
+    // Calculate real participant counts from session data
+    const session = await this.sessionModel.findOne({ roomId: room._id });
+    if (session) {
+      room.totalParticipantsJoined = session.participants.length;
+      room.currentActiveParticipants = session.participants.filter(p => p.isActive).length;
+      room.peakParticipants = Math.max(room.peakParticipants || 0, room.currentActiveParticipants);
+    } else {
+      room.totalParticipantsJoined = 0;
+      room.currentActiveParticipants = 0;
+      room.peakParticipants = 0;
+    }
+
+    // Invalidate cache to ensure fresh participant data
+    this.invalidatePublicRoomsCache();
+
+    return room;
+  }
+
+  async findPublicRooms(): Promise<Omit<LivekitRoom, 'secretId'>[]> {
+    try {
+      const timestamp = new Date().toISOString();
+      const now = Date.now();
+      
+      // Rate limiting: prevent calls more frequent than MIN_CALL_INTERVAL
+      if (now - this.lastCallTime < this.MIN_CALL_INTERVAL) {
+        // Return cached data if available, otherwise return empty array
+        if (this.publicRoomsCache) {
+          return this.publicRoomsCache.data;
+        }
+        return [];
+      }
+      
+      // Update last call time
+      this.lastCallTime = now;
+      
+      // Check cache first
+      if (this.publicRoomsCache && (now - this.publicRoomsCache.timestamp) < this.CACHE_DURATION) {
+        // TEMPORARY: Disable logging to stop infinite loop
+        // console.log(`[${timestamp}] Returning cached public rooms:`, this.publicRoomsCache.data.length);
+        return this.publicRoomsCache.data;
+      }
+      
+      // TEMPORARY: Disable logging to stop infinite loop
+      // console.log(`[${timestamp}] Finding public rooms... (called from:`, new Error().stack?.split('\n')[2]?.trim(), ')');
+      
+      // Query for public rooms - no ID required
+      const rooms = await this.roomModel
+        .find({ isActive: true, isPrivate: false })
+        .populate('createdBy', 'username firstName lastName email avatar')
+        .select('-secretId')
+        .exec();
+      
+      // TEMPORARY: Disable logging to stop infinite loop
+      // console.log(`[${timestamp}] Found public rooms:`, rooms.length);
+      
+      // If no rooms found, return empty array
+      if (!rooms || rooms.length === 0) {
+        // TEMPORARY: Disable logging to stop infinite loop
+        // console.log('No public rooms found, returning empty array');
+        return [];
+      }
+      
+      // Manually populate invited users
+      for (const room of rooms) {
+        if (room.invitedUsers && room.invitedUsers.length > 0) {
+          const userIds = room.invitedUsers.map(id => id.toString());
+          const users = await this.userModel
+            .find({ _id: { $in: userIds } })
+            .select('username firstName lastName email avatar')
+            .exec();
+          
+          // Replace ObjectIds with user objects
+          room.invitedUsers = users as any;
+        }
+        
+        // Calculate real participant counts from session data
+        const session = await this.sessionModel.findOne({ roomId: room._id });
+        if (session) {
+          room.totalParticipantsJoined = session.participants.length;
+          room.currentActiveParticipants = session.participants.filter(p => p.isActive).length;
+          room.peakParticipants = Math.max(room.peakParticipants || 0, room.currentActiveParticipants);
+        } else {
+          room.totalParticipantsJoined = 0;
+          room.currentActiveParticipants = 0;
+          room.peakParticipants = 0;
+        }
+      }
+      
+      // Cache the results
+      this.publicRoomsCache = {
+        data: rooms,
+        timestamp: now
+      };
+      
+      return rooms;
+    } catch (error) {
+      console.error('Error in findPublicRooms:', error);
+      throw new Error(`Failed to find public rooms: ${error.message}`);
+    }
+  }
+
+  // Method to manually clear cache (useful for testing)
+  clearPublicRoomsCache(): void {
+    this.publicRoomsCache = null;
+    this.lastCallTime = 0;
+  }
+
+  // Method to invalidate cache when room status changes
+  invalidatePublicRoomsCache(): void {
+    this.clearPublicRoomsCache();
+  }
+
+
 }

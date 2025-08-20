@@ -25,6 +25,8 @@ export class LivekitSession {
         },
         username: String,
         joinedAt: Date,
+        leftAt: Date, // When the participant left the session (optional)
+        isActive: { type: Boolean, default: true }, // Whether currently in session
       },
     ],
     default: [],
@@ -33,6 +35,8 @@ export class LivekitSession {
     userId: Types.ObjectId;
     username: string;
     joinedAt: Date;
+    leftAt?: Date; // Optional - only set when participant leaves
+    isActive: boolean; // Whether currently in session
   }>;
 
   @Prop()

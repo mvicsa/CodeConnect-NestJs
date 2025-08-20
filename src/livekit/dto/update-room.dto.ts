@@ -7,6 +7,7 @@ import {
   Min,
   Max,
   IsArray,
+  IsDateString,
 } from 'class-validator';
 
 export class UpdateRoomDto {
@@ -56,6 +57,15 @@ export class UpdateRoomDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiProperty({
+    description: 'Scheduled start time for the meeting (optional)',
+    example: '2024-01-15T10:00:00.000Z',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString()
+  scheduledStartTime?: string;
 
   @ApiProperty({
     description: 'Array of user IDs to invite to the room',
