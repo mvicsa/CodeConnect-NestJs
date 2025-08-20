@@ -1,4 +1,60 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsNumber, Min, Max } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
+
+export class SessionHistoryQueryDto {
+  @ApiProperty({ 
+    description: 'Page number (starts from 1)', 
+    example: 1, 
+    required: false,
+    default: 1 
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    const num = parseInt(value, 10);
+    return isNaN(num) ? 1 : num;
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  page?: number;
+
+  @ApiProperty({ 
+    description: 'Number of items per page', 
+    example: 10, 
+    required: false,
+    default: 10 
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    const num = parseInt(value, 10);
+    return isNaN(num) ? 10 : Math.min(Math.max(num, 1), 100);
+  })
+  @Type(() => Number)
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
+export class PaginationDto {
+  @ApiProperty({ description: 'Current page number', example: 1 })
+  page: number;
+
+  @ApiProperty({ description: 'Number of items per page', example: 10 })
+  limit: number;
+
+  @ApiProperty({ description: 'Total number of items', example: 150 })
+  total: number;
+
+  @ApiProperty({ description: 'Total number of pages', example: 15 })
+  totalPages: number;
+
+  @ApiProperty({ description: 'Whether there is a next page', example: true })
+  hasNext: boolean;
+
+  @ApiProperty({ description: 'Whether there is a previous page', example: false })
+  hasPrev: boolean;
+}
 
 export class SessionHistoryItemDto {
   @ApiProperty({ description: 'Room ID' })
@@ -65,5 +121,8 @@ export class SessionHistoryResponseDto {
 
   @ApiProperty({ description: 'Response message' })
   message: string;
+
+  @ApiProperty({ description: 'Pagination metadata', type: PaginationDto })
+  pagination: PaginationDto;
 }
 

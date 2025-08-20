@@ -20,10 +20,8 @@ export class LivekitRoom {
   @Prop({ required: false })
   secretId?: string;
 
-
-
   @ApiProperty({ required: false })
-  @Prop({ default: false })
+  @Prop({ required: false })
   isPrivate: boolean;
 
   @ApiProperty({ required: false })
@@ -33,6 +31,22 @@ export class LivekitRoom {
   @ApiProperty({ required: false })
   @Prop({ default: true })
   isActive: boolean;
+
+  @ApiProperty({ 
+    required: false, 
+    description: 'Scheduled start time for the meeting (optional)',
+    example: '2024-01-15T10:00:00.000Z'
+  })
+  @Prop({ required: false })
+  scheduledStartTime?: Date;
+
+  @ApiProperty({ 
+    required: false, 
+    description: 'Actual time when the session started',
+    example: '2024-01-15T09:45:00.000Z'
+  })
+  @Prop({ required: false })
+  actualStartTime?: Date;
 
   @ApiProperty({ required: false, type: String })
   @Prop()
@@ -45,6 +59,30 @@ export class LivekitRoom {
   @ApiProperty({ required: false, type: String })
   @Prop()
   endedDate?: Date;
+
+  @ApiProperty({ 
+    required: false, 
+    description: 'Total number of unique participants who joined this session',
+    example: 15
+  })
+  @Prop({ default: 0 })
+  totalParticipantsJoined?: number;
+
+  @ApiProperty({ 
+    required: false, 
+    description: 'Current number of active participants in the session',
+    example: 8
+  })
+  @Prop({ default: 0 })
+  currentActiveParticipants?: number;
+
+  @ApiProperty({ 
+    required: false, 
+    description: 'Peak number of participants during the session',
+    example: 12
+  })
+  @Prop({ default: 0 })
+  peakParticipants?: number;
 
   @Prop([{ type: Types.ObjectId, ref: 'User' }]) // Reference User model explicitly
   invitedUsers: Types.ObjectId[];

@@ -27,6 +27,18 @@ export class UsersService {
     // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
 
+  async findByEmail(email: string) {
+    // Exclude password for security
+    const user = await this.userModel
+      .findOne({ email: email.toLowerCase() })
+      .select('-password');
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
+    // Note: Blocked users are filtered out by the BlockFilterInterceptor
+  }
+
   async findAll() {
     // Exclude password
     return this.userModel.find().select('-password');
