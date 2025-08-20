@@ -68,15 +68,29 @@ export class LivekitController {
       hasApiKey: !!apiKey,
       hasApiSecret: !!apiSecret,
       hasUrl: !!livekitUrl,
-      url: livekitUrl
+      url: livekitUrl,
+      apiKeyLength: apiKey ? apiKey.length : 0,
+      apiSecretLength: apiSecret ? apiSecret.length : 0
     });
     
     if (!apiKey || !apiSecret || !livekitUrl) {
       console.warn('LiveKit configuration missing - falling back to session data');
+      console.warn('Missing environment variables:', {
+        LIVEKIT_API_KEY: !apiKey ? 'MISSING' : 'PRESENT',
+        LIVEKIT_API_SECRET: !apiSecret ? 'MISSING' : 'PRESENT',
+        LIVEKIT_URL: !livekitUrl ? 'MISSING' : 'PRESENT'
+      });
       return null;
     }
     
-    return new RoomServiceClient(livekitUrl, apiKey, apiSecret);
+    try {
+      const client = new RoomServiceClient(livekitUrl, apiKey, apiSecret);
+      console.log('LiveKit client created successfully');
+      return client;
+    } catch (error) {
+      console.error('Failed to create LiveKit client:', error);
+      return null;
+    }
   }
 
   private async ensureRoomExists(livekitClient: RoomServiceClient, roomName: string, roomDisplayName: string): Promise<void> {
@@ -1351,8 +1365,15 @@ export class LivekitController {
        try {
          // Get current participants
          console.log(`Getting participants for LiveKit room: ${livekitRoomName}`);
-         const participants = await livekitClient.listParticipants(livekitRoomName);
-         console.log(`Found ${participants?.length || 0} participants in LiveKit room`);
+         let participants: any[] = [];
+         try {
+           participants = await livekitClient.listParticipants(livekitRoomName);
+           console.log(`Found ${participants?.length || 0} participants in LiveKit room`);
+         } catch (participantError: any) {
+           console.warn(`Failed to get participants from LiveKit: ${participantError.message}`);
+           console.warn('Continuing with session end process...');
+           participants = [];
+         }
          
          // Disconnect all participants
          if (participants && participants.length > 0) {
@@ -1373,17 +1394,16 @@ export class LivekitController {
            console.log('No participants to disconnect');
          }
 
-                   // Update room status in database with ended date
-          console.log('Updating room status in database...');
-          const endedDate = new Date();
-          await this.roomModel.findByIdAndUpdate(roomId, { 
-            isActive: false,
-            endedDate: endedDate,
-            updatedAt: endedDate,
-
-          });
-          console.log('Room status updated successfully in database');
-          
+         // Update room status in database with ended date
+         console.log('Updating room status in database...');
+         const endedDate = new Date();
+         await this.roomModel.findByIdAndUpdate(roomId, { 
+           isActive: false,
+           endedDate: endedDate,
+           updatedAt: endedDate,
+         });
+         console.log('Room status updated successfully in database');
+         
          // Mark all participants as inactive and set their leave time
          console.log('Updating session participants...');
          const session = await this.sessionModel.findOne({ roomId: room._id });
@@ -1417,17 +1437,21 @@ export class LivekitController {
                  },
                }));
 
-               await this.notificationService.addNotifications(notifications);
-               console.log(`Sent rating requests to ${notifications.length} participants`);
+               try {
+                 await this.notificationService.addNotifications(notifications);
+                 console.log(`Sent rating requests to ${notifications.length} participants`);
+               } catch (notificationError: any) {
+                 console.error('Failed to send rating notifications:', notificationError.message);
+                 // Don't fail the entire operation if notifications fail
+               }
              }
            } catch (ratingError) {
              console.error('Failed to send rating requests:', ratingError);
+             // Don't fail the entire operation if rating logic fails
            }
          } else {
            console.log('No session found for this room');
          }
-
-
 
          return {
            success: true,
@@ -1439,13 +1463,21 @@ export class LivekitController {
          };
 
        } catch (livekitError: any) {
+         console.error('LiveKit operation failed:', livekitError);
+         console.error('Error details:', {
+           message: livekitError.message,
+           status: livekitError.status,
+           code: livekitError.code,
+           stack: livekitError.stack
+         });
+         
          // Even if LiveKit fails, mark room as inactive in database
+         console.log('LiveKit failed, but marking room as inactive in database...');
          const endedDate = new Date();
          await this.roomModel.findByIdAndUpdate(roomId, { 
            isActive: false,
            endedDate: endedDate,
            updatedAt: endedDate,
-
          });
          
          // Mark all participants as inactive and set their leave time
@@ -1458,17 +1490,46 @@ export class LivekitController {
            await session.save();
          }
 
-
-
-         throw new HttpException(
-           `Failed to end session on LiveKit: ${livekitError.message}. Room marked as inactive.`,
-           HttpStatus.INTERNAL_SERVER_ERROR,
-         );
+         // Return success even if LiveKit failed, since we've updated the database
+         return {
+           success: true,
+           roomId: room._id,
+           roomName: room.name,
+           participantsDisconnected: 0,
+           message: 'Session ended successfully in database. LiveKit operations may have failed.',
+           timestamp: new Date().toISOString(),
+           warning: 'LiveKit operations failed, but session was ended in database'
+         };
        }
 
      } catch (error) {
        if (error instanceof HttpException) throw error;
+       
        console.error('Error ending session:', error);
+       console.error('Error details:', {
+         message: error.message,
+         name: error.name,
+         stack: error.stack,
+         roomId: roomId,
+         userId: req.user?.sub
+       });
+       
+       // Check if it's a database connection issue
+       if (error.name === 'MongoNetworkError' || error.message.includes('MongoDB')) {
+         throw new HttpException(
+           'Database connection error. Please try again later.',
+           HttpStatus.SERVICE_UNAVAILABLE
+         );
+       }
+       
+       // Check if it's an environment variable issue
+       if (error.message.includes('LIVEKIT') || error.message.includes('environment')) {
+         throw new HttpException(
+           'LiveKit configuration error. Please check server configuration.',
+           HttpStatus.INTERNAL_SERVER_ERROR
+         );
+       }
+       
        throw new HttpException(
          `Failed to end session: ${error.message}`,
          HttpStatus.INTERNAL_SERVER_ERROR,
