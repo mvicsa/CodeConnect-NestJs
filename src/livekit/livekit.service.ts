@@ -16,11 +16,6 @@ import { LivekitSession, LivekitSessionDocument } from './session.schema';
 
 @Injectable()
 export class LivekitService {
-  private publicRoomsCache: { data: any[], timestamp: number } | null = null;
-  private readonly CACHE_DURATION = 30000; // 30 seconds cache (increased to reduce calls)
-  private lastCallTime: number = 0;
-  private readonly MIN_CALL_INTERVAL = 1000; // 1 second minimum between calls
-
   constructor(
     @InjectModel(LivekitRoom.name)
     private readonly roomModel: Model<LivekitRoomDocument>,
@@ -148,11 +143,6 @@ export class LivekitService {
       const savedRoom = await room.save();
       console.log('Room saved successfully:', savedRoom);
       
-      // Clear public rooms cache if this is a public room
-      if (!savedRoom.isPrivate) {
-        this.clearPublicRoomsCache();
-      }
-        
       // Return secretId only for private rooms
       if (savedRoom.isPrivate) {
         return { ...savedRoom.toObject(), secretId: savedRoom.secretId };
@@ -335,11 +325,6 @@ export class LivekitService {
       throw new NotFoundException('Room not found after update');
     }
 
-    // Clear public rooms cache if privacy status or active status changed
-    if (updatedRoom.isPrivate !== room.isPrivate || updatedRoom.isActive !== room.isActive) {
-      this.clearPublicRoomsCache();
-    }
-
     // Manually populate invited users
     if (updatedRoom.invitedUsers && updatedRoom.invitedUsers.length > 0) {
       const userIds = updatedRoom.invitedUsers.map(id => id.toString());
@@ -383,9 +368,6 @@ export class LivekitService {
 
     // Delete the room
     await this.roomModel.findByIdAndDelete(id);
-    
-    // Clear public rooms cache to ensure fresh data
-    this.clearPublicRoomsCache();
     
     // Also delete related sessions
     await this.sessionModel.deleteMany({ roomId: id });
@@ -555,39 +537,11 @@ export class LivekitService {
       room.peakParticipants = 0;
     }
 
-    // Invalidate cache to ensure fresh participant data
-    this.invalidatePublicRoomsCache();
-
     return room;
   }
 
   async findPublicRooms(): Promise<Omit<LivekitRoom, 'secretId'>[]> {
     try {
-      const timestamp = new Date().toISOString();
-      const now = Date.now();
-      
-      // Rate limiting: prevent calls more frequent than MIN_CALL_INTERVAL
-      if (now - this.lastCallTime < this.MIN_CALL_INTERVAL) {
-        // Return cached data if available, otherwise return empty array
-        if (this.publicRoomsCache) {
-          return this.publicRoomsCache.data;
-        }
-        return [];
-      }
-      
-      // Update last call time
-      this.lastCallTime = now;
-      
-      // Check cache first
-      if (this.publicRoomsCache && (now - this.publicRoomsCache.timestamp) < this.CACHE_DURATION) {
-        // TEMPORARY: Disable logging to stop infinite loop
-        // console.log(`[${timestamp}] Returning cached public rooms:`, this.publicRoomsCache.data.length);
-        return this.publicRoomsCache.data;
-      }
-      
-      // TEMPORARY: Disable logging to stop infinite loop
-      // console.log(`[${timestamp}] Finding public rooms... (called from:`, new Error().stack?.split('\n')[2]?.trim(), ')');
-      
       // Query for public rooms - no ID required
       const rooms = await this.roomModel
         .find({ isActive: true, isPrivate: false })
@@ -595,13 +549,8 @@ export class LivekitService {
         .select('-secretId')
         .exec();
       
-      // TEMPORARY: Disable logging to stop infinite loop
-      // console.log(`[${timestamp}] Found public rooms:`, rooms.length);
-      
       // If no rooms found, return empty array
       if (!rooms || rooms.length === 0) {
-        // TEMPORARY: Disable logging to stop infinite loop
-        // console.log('No public rooms found, returning empty array');
         return [];
       }
       
@@ -631,28 +580,11 @@ export class LivekitService {
         }
       }
       
-      // Cache the results
-      this.publicRoomsCache = {
-        data: rooms,
-        timestamp: now
-      };
-      
       return rooms;
     } catch (error) {
       console.error('Error in findPublicRooms:', error);
       throw new Error(`Failed to find public rooms: ${error.message}`);
     }
-  }
-
-  // Method to manually clear cache (useful for testing)
-  clearPublicRoomsCache(): void {
-    this.publicRoomsCache = null;
-    this.lastCallTime = 0;
-  }
-
-  // Method to invalidate cache when room status changes
-  invalidatePublicRoomsCache(): void {
-    this.clearPublicRoomsCache();
   }
 
 
