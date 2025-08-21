@@ -193,6 +193,31 @@ export class LivekitController {
         );
       }
 
+      // Check if room is scheduled and not yet accessible
+      if (roomDocument.scheduledStartTime) {
+        const now = new Date();
+        if (now < roomDocument.scheduledStartTime) {
+          const timeUntilStart = roomDocument.scheduledStartTime.getTime() - now.getTime();
+          const days = Math.floor(timeUntilStart / (1000 * 60 * 60 * 24));
+          const hours = Math.floor((timeUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const minutes = Math.ceil((timeUntilStart % (1000 * 60 * 60)) / (1000 * 60));
+          
+          let timeMessage: string;
+          if (days > 0) {
+            timeMessage = `${days} day(s), ${hours} hour(s), ${minutes} minute(s)`;
+          } else if (hours > 0) {
+            timeMessage = `${hours} hour(s), ${minutes} minute(s)`;
+          } else {
+            timeMessage = `${minutes} minute(s)`;
+          }
+          
+          throw new HttpException(
+            `This session is scheduled to start in ${timeMessage}. Please wait until ${roomDocument.scheduledStartTime.toLocaleString()} to join.`,
+            HttpStatus.FORBIDDEN
+          );
+        }
+      }
+
       const roomName = roomDocument.name;
       const livekitRoomName = roomDocument.secretId; // Use secretId for LiveKit room identifier
       const apiKey = process.env.LIVEKIT_API_KEY;
@@ -361,6 +386,31 @@ export class LivekitController {
           throw new HttpException(
             'You are not invited to this private room',
             HttpStatus.FORBIDDEN,
+          );
+        }
+      }
+
+      // Check if room is scheduled and not yet accessible
+      if (roomDocument.scheduledStartTime) {
+        const now = new Date();
+        if (now < roomDocument.scheduledStartTime) {
+          const timeUntilStart = roomDocument.scheduledStartTime.getTime() - now.getTime();
+          const days = Math.floor(timeUntilStart / (1000 * 60 * 60 * 24));
+          const hours = Math.floor((timeUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          const minutes = Math.ceil((timeUntilStart % (1000 * 60 * 60)) / (1000 * 60));
+          
+          let timeMessage: string;
+          if (days > 0) {
+            timeMessage = `${days} day(s), ${hours} hour(s), ${minutes} minute(s)`;
+          } else if (hours > 0) {
+            timeMessage = `${hours} hour(s), ${minutes} minute(s)`;
+          } else {
+            timeMessage = `${minutes} minute(s)`;
+          }
+          
+          throw new HttpException(
+            `This session is scheduled to start in ${timeMessage}. Please wait until ${roomDocument.scheduledStartTime.toLocaleString()} to join.`,
+            HttpStatus.FORBIDDEN
           );
         }
       }
@@ -1265,8 +1315,74 @@ export class LivekitController {
     }
   }
 
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Check room accessibility status',
+    description: 'Check if a room is accessible based on scheduled time and other conditions.',
+  })
+  @ApiResponse({ status: 200, description: 'Room accessibility status' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Room not found' })
+  @UseGuards(JwtAuthGuard)
+  @Get('rooms/:roomId/accessibility')
+  async checkRoomAccessibility(@Param('roomId') roomId: string) {
+    try {
+      const room = await this.roomModel.findById(roomId)
+        .populate('createdBy', 'username firstName lastName email avatar');
+      
+      if (!room) {
+        throw new HttpException('Room not found', HttpStatus.NOT_FOUND);
+      }
 
+      const now = new Date();
+      let isAccessible = true;
+      let reason = 'Room is accessible';
+      let timeUntilAccessible: string | null = null;
 
+      // Check if room is active
+      if (!room.isActive) {
+        isAccessible = false;
+        reason = 'Room is not active';
+      }
+      // Check if room is scheduled and not yet accessible
+      else if (room.scheduledStartTime && now < room.scheduledStartTime) {
+        isAccessible = false;
+        reason = 'Room is scheduled for a future time';
+        
+        const timeUntilStart = room.scheduledStartTime.getTime() - now.getTime();
+        const days = Math.floor(timeUntilStart / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((timeUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.ceil((timeUntilStart % (1000 * 60 * 60)) / (1000 * 60));
+        
+        if (days > 0) {
+          timeUntilAccessible = `${days} day(s), ${hours} hour(s), ${minutes} minute(s)`;
+        } else if (hours > 0) {
+          timeUntilAccessible = `${hours} hour(s), ${minutes} minute(s)`;
+        } else {
+          timeUntilAccessible = `${minutes} minute(s)`;
+        }
+      }
+
+      return {
+        roomId: room._id,
+        roomName: room.name,
+        isAccessible,
+        reason,
+        scheduledStartTime: room.scheduledStartTime,
+        currentTime: now,
+        timeUntilAccessible,
+        isActive: room.isActive,
+        isPrivate: room.isPrivate,
+        createdBy: room.createdBy
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        `Failed to check room accessibility: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 
 
    @ApiBearerAuth()
