@@ -126,8 +126,10 @@ export class LivekitService {
         peakParticipants: 0,
       };
       
-      // Convert scheduledStartTime from string to Date if provided
-      if (createRoomDto.scheduledStartTime) {
+      // Convert scheduledStartTime from string to Date if provided, or set to null if empty
+      if (createRoomDto.scheduledStartTime === null || createRoomDto.scheduledStartTime === '') {
+        roomData.scheduledStartTime = null;
+      } else if (createRoomDto.scheduledStartTime) {
         roomData.scheduledStartTime = new Date(createRoomDto.scheduledStartTime);
       }
       
@@ -299,8 +301,10 @@ export class LivekitService {
       invitedUsers,
     };
     
-    // Convert scheduledStartTime from string to Date if provided
-    if (updateRoomDto.scheduledStartTime) {
+    // Convert scheduledStartTime from string to Date if provided, or clear it if null/empty
+    if (updateRoomDto.scheduledStartTime === null || updateRoomDto.scheduledStartTime === '') {
+      updatedData.scheduledStartTime = null;
+    } else if (updateRoomDto.scheduledStartTime) {
       updatedData.scheduledStartTime = new Date(updateRoomDto.scheduledStartTime);
     }
     
@@ -513,6 +517,19 @@ export class LivekitService {
       throw new NotFoundException('Room is not active');
     }
 
+    // Check if room is scheduled and not yet accessible
+    if (room.scheduledStartTime) {
+      const now = new Date();
+      if (now < room.scheduledStartTime) {
+        const timeUntilStart = room.scheduledStartTime.getTime() - now.getTime();
+        const minutesUntilStart = Math.ceil(timeUntilStart / (1000 * 60));
+        
+        throw new ForbiddenException(
+          `This session is scheduled to start in ${minutesUntilStart} minutes. Please wait until ${room.scheduledStartTime.toLocaleString()} to join.`
+        );
+      }
+    }
+
     // Manually populate invited users
     if (room.invitedUsers && room.invitedUsers.length > 0) {
       const userIds = room.invitedUsers.map(id => id.toString());
@@ -554,8 +571,17 @@ export class LivekitService {
         return [];
       }
       
+      // Filter out rooms that are not yet accessible based on scheduled time
+      const now = new Date();
+      const accessibleRooms = rooms.filter(room => {
+        if (!room.scheduledStartTime) {
+          return true; // No scheduled time, always accessible
+        }
+        return now >= room.scheduledStartTime;
+      });
+      
       // Manually populate invited users
-      for (const room of rooms) {
+      for (const room of accessibleRooms) {
         if (room.invitedUsers && room.invitedUsers.length > 0) {
           const userIds = room.invitedUsers.map(id => id.toString());
           const users = await this.userModel
@@ -580,10 +606,45 @@ export class LivekitService {
         }
       }
       
-      return rooms;
+      return accessibleRooms;
     } catch (error) {
       console.error('Error in findPublicRooms:', error);
       throw new Error(`Failed to find public rooms: ${error.message}`);
+    }
+  }
+
+  // Helper method to check if a room is accessible based on scheduled time
+  private isRoomAccessible(room: LivekitRoom): boolean {
+    if (!room.scheduledStartTime) {
+      return true; // No scheduled time, always accessible
+    }
+    
+    const now = new Date();
+    return now >= room.scheduledStartTime;
+  }
+
+  // Helper method to get time until room becomes accessible
+  private getTimeUntilAccessible(room: LivekitRoom): string {
+    if (!room.scheduledStartTime) {
+      return 'Room is accessible now';
+    }
+    
+    const now = new Date();
+    if (now >= room.scheduledStartTime) {
+      return 'Room is accessible now';
+    }
+    
+    const timeUntilStart = room.scheduledStartTime.getTime() - now.getTime();
+    const days = Math.floor(timeUntilStart / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((timeUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.ceil((timeUntilStart % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (days > 0) {
+      return `${days} day(s), ${hours} hour(s), ${minutes} minute(s)`;
+    } else if (hours > 0) {
+      return `${hours} hour(s), ${minutes} minute(s)`;
+    } else {
+      return `${minutes} minute(s)`;
     }
   }
 
