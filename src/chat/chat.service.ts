@@ -197,7 +197,7 @@ export class ChatService {
 
       const messages = await this.messageModel
         .find(query)
-        .sort({ _id: -1 }) // Sort by _id descending (newest first)
+        .sort({ _id: 1 }) // Sort by _id ascending (oldest first)
         .limit(limit)
         .populate('sender', '-password')
         .populate({
@@ -285,7 +285,7 @@ export class ChatService {
           ...room,
           messages: messages.reverse(), // Return messages in chronological order
           unreadCount,
-          lastMessage: messages[0] || null,
+          lastMessage: messages[messages.length - 1] || null, // Get the newest message (last in reversed array)
         };
       }),
     );
