@@ -23,6 +23,12 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    // Sort socialLinks alphabetically by title
+    if (user.socialLinks && user.socialLinks.length > 0) {
+      user.socialLinks.sort((a, b) => a.title.localeCompare(b.title));
+    }
+
     return user;
     // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
@@ -35,6 +41,12 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    // Sort socialLinks alphabetically by title
+    if (user.socialLinks && user.socialLinks.length > 0) {
+      user.socialLinks.sort((a, b) => a.title.localeCompare(b.title));
+    }
+
     return user;
     // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
@@ -143,6 +155,12 @@ export class UsersService {
       .findByIdAndUpdate(userId, updateUserDto, { new: true })
       .select('-password');
     if (!user) throw new NotFoundException('User not found');
+
+    // Sort socialLinks alphabetically by title
+    if (user.socialLinks && user.socialLinks.length > 0) {
+      user.socialLinks.sort((a, b) => a.title.localeCompare(b.title));
+    }
+
     return user;
     // Note: Blocked users are filtered out by the BlockFilterInterceptor
   }
