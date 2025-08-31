@@ -172,6 +172,11 @@ export class AuthService {
       throw new BadRequestException('User not found');
     }
 
+    // Sort socialLinks alphabetically by title
+    if (user.socialLinks && user.socialLinks.length > 0) {
+      user.socialLinks.sort((a, b) => a.title.localeCompare(b.title));
+    }
+
     return user;
   }
 
