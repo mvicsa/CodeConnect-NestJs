@@ -14,6 +14,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GitHubAuthGuard } from './guards/github-auth.guard';
 import {
@@ -108,6 +109,35 @@ export class AuthController {
     } catch (error) {
       if (error.status === 400) {
         throw error;
+      }
+      throw new Error('Internal server error');
+    }
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiOkResponse({ description: 'Password changed successfully' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized - Invalid token' })
+  @ApiBadRequestResponse({ 
+    description: 'Current password is incorrect or validation failed' 
+  })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async changePassword(
+    @Body() changePasswordDto: ChangePasswordDto,
+    @Req() req: Request & { user: any }
+  ) {
+    try {
+      const userId: string = req.user?.sub;
+      if (!userId) {
+        throw new Error('User ID not found in token');
+      }
+      return await this.authService.changePassword(userId, changePasswordDto);
+    } catch (error) {
+      if (error.status === 400) {
+        throw error;
+      }
+      if (error.message === 'User ID not found in token') {
+        throw { status: 401, message: 'Unauthorized' };
       }
       throw new Error('Internal server error');
     }
