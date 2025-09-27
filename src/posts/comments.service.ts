@@ -69,7 +69,7 @@ export class CommentsService {
     await created.populate('createdBy', '-password');
     await created.populate({
       path: 'userReactions.userId',
-      select: '_id firstName lastName avatar role',
+      select: '_id firstName lastName username avatar role',
     });
     const post = await this.postsService.findOne(
       data.postId as unknown as string,
@@ -193,7 +193,7 @@ export class CommentsService {
       .populate('createdBy', '-password')
       .populate({
         path: 'userReactions.userId',
-        select: '_id firstName lastName avatar role',
+        select: '_id firstName lastName username avatar role',
       })
       .exec();
   }
@@ -204,7 +204,7 @@ export class CommentsService {
       .populate('createdBy', '-password')
       .populate({
         path: 'userReactions.userId',
-        select: '_id firstName lastName avatar role',
+        select: '_id firstName lastName username avatar role',
       })
       .exec();
   }
@@ -231,7 +231,7 @@ export class CommentsService {
     await comment.populate('createdBy', '-password');
     await comment.populate({
       path: 'userReactions.userId',
-      select: '_id firstName lastName avatar role',
+      select: '_id firstName lastName username avatar role',
     });
 
     // Handle mentions if text was updated
@@ -655,7 +655,7 @@ export class CommentsService {
     await comment.populate('createdBy', '-password');
     await comment.populate({
       path: 'userReactions.userId',
-      select: '_id firstName lastName avatar role',
+      select: '_id firstName lastName username avatar role',
     });
 
     return { comment, action };
@@ -667,7 +667,7 @@ export class CommentsService {
       .populate('createdBy', '-password')
       .populate({
         path: 'userReactions.userId',
-        select: '_id firstName lastName avatar role',
+        select: '_id firstName lastName username avatar role',
       });
     if (!comment) throw new NotFoundException('Comment not found');
     return comment;
