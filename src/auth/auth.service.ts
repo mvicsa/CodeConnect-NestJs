@@ -11,6 +11,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthMailerService } from './mailer.service';
 
 @Injectable()
@@ -172,7 +173,44 @@ export class AuthService {
       throw new BadRequestException('User not found');
     }
 
+    // Sort socialLinks alphabetically by title
+    if (user.socialLinks && user.socialLinks.length > 0) {
+      user.socialLinks.sort((a, b) => a.title.localeCompare(b.title));
+    }
+
     return user;
+  }
+
+  async changePassword(userId: string, changePasswordDto: ChangePasswordDto) {
+    const { currentPassword, newPassword } = changePasswordDto;
+
+    // Find the user
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    // Check if new password is different from current password
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      throw new BadRequestException('New password must be different from current password');
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt();
+    const hashedNewPassword = await bcrypt.hash(newPassword, salt);
+
+    // Update user password
+    user.password = hashedNewPassword;
+    await user.save();
+
+    return { message: 'Password changed successfully' };
   }
 
   async handleGithubLogin(githubUser: any) {
