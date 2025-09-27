@@ -6,7 +6,10 @@ export type MessageDocument = Message & Document;
 export enum MessageType {
   TEXT = 'text',
   IMAGE = 'image',
+  VIDEO = 'video',
+  AUDIO = 'audio',
   FILE = 'file',
+  CODE = 'code',
 }
 
 @Schema({ timestamps: true })
@@ -26,14 +29,58 @@ export class Message {
   @Prop({ default: null })
   fileUrl?: string;
 
+  @Prop({ type: Object, default: null })
+  fileData?: {
+    name?: string;
+    size?: number;
+    type?: string;
+  };
+
+  @Prop({ type: Object, default: null })
+  codeData?: {
+    code: string;
+    language: string;
+  };
+
   @Prop({ type: Types.ObjectId, ref: 'Message', default: null })
   replyTo?: Types.ObjectId;
 
   @Prop({
-    type: [{ user: { type: Types.ObjectId, ref: 'User' }, emoji: String }],
+    type: [{
+      userId: { type: Types.ObjectId, ref: 'User' },
+      username: String,
+      reaction: String,
+      createdAt: { type: Date, default: Date.now }
+    }],
     default: [],
   })
-  reactions: { user: Types.ObjectId; emoji: string }[];
+  userReactions: { userId: Types.ObjectId; username: string; reaction: string; createdAt: Date }[];
+
+  @Prop({
+    type: {
+      like: { type: Number, default: 0 },
+      love: { type: Number, default: 0 },
+      laugh: { type: Number, default: 0 },
+      wow: { type: Number, default: 0 },
+      sad: { type: Number, default: 0 },
+      angry: { type: Number, default: 0 },
+      clap: { type: Number, default: 0 },
+      fire: { type: Number, default: 0 },
+      star: { type: Number, default: 0 },
+    },
+    default: { like: 0, love: 0, laugh: 0, wow: 0, sad: 0, angry: 0, clap: 0, fire: 0, star: 0 },
+  })
+  reactions: {
+    like: number;
+    love: number;
+    laugh: number;
+    wow: number;
+    sad: number;
+    angry: number;
+    clap: number;
+    fire: number;
+    star: number;
+  };
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   seenBy: Types.ObjectId[];

@@ -13,6 +13,7 @@ export class ChatService {
   ) {}
 
   async createMessage(userId: string, dto: CreateMessageDto) {
+    console.log('[SERVICE] Creating message with data:', { userId, dto });
     // Validate room membership (optional: can be added for security)
     const message = new this.messageModel({
       chatRoom: new Types.ObjectId(dto.roomId), // Convert to ObjectId
@@ -20,23 +21,35 @@ export class ChatService {
       content: dto.content,
       type: dto.type,
       fileUrl: dto.fileUrl,
+      fileData: dto.fileData,
+      codeData: dto.codeData,
       replyTo: dto.replyTo,
-      reactions: [],
+      userReactions: [],
+      reactions: { like: 0, love: 0, laugh: 0, wow: 0, sad: 0, angry: 0, clap: 0, fire: 0, star: 0 },
       seenBy: [userId],
       pinned: false,
     });
+    console.log('[SERVICE] Message model created:', message);
     await message.save();
+    console.log('[SERVICE] Message saved to database with ID:', message._id);
 
     // Return populated message
-    return this.messageModel
+    const populatedMessage = await this.messageModel
       .findById(message._id)
       .populate({ path: 'sender', select: '-password' })
       .populate({
         path: 'replyTo',
         populate: { path: 'sender', select: '-password' },
       })
+      .populate({
+        path: 'userReactions.userId',
+        select: '_id firstName lastName avatar role',
+      })
       .lean()
       .exec();
+    
+    console.log('[SERVICE] Populated message returned:', populatedMessage);
+    return populatedMessage;
   }
 
   async markMessagesAsSeen(userId: string, messageIds: string[]) {
@@ -101,30 +114,97 @@ export class ChatService {
     }
   }
 
-  async reactToMessage(userId: string, messageId: string, emoji: string) {
-    // Remove previous reaction by this user, then add new one
-    await this.messageModel
-      .findByIdAndUpdate(messageId, { $pull: { reactions: { user: userId } } })
-      .exec();
-    await this.messageModel
-      .findByIdAndUpdate(messageId, {
-        $push: { reactions: { user: userId, emoji } },
-      })
-      .exec();
-    // Return populated message
-    return this.messageModel
-      .findById(messageId)
-      .populate({ path: 'sender', select: '-password' })
-      .populate({
-        path: 'replyTo',
-        populate: { path: 'sender', select: '-password' },
-      })
-      .populate({
-        path: 'reactions.user',
-        select: '-password',
-      })
-      .lean()
-      .exec();
+  async editMessage(userId: string, messageId: string, updates: any) {
+    console.log('[SERVICE] Editing message:', { userId, messageId, updates });
+    
+    try {
+      // Check if user is the sender of the message
+      const message = await this.messageModel.findById(messageId);
+      if (!message) {
+        throw new Error('Message not found');
+      }
+      
+      if (message.sender.toString() !== userId) {
+        throw new Error('Unauthorized to edit this message');
+      }
+      
+      // Update the message with the new data
+      const updatedMessage = await this.messageModel
+        .findByIdAndUpdate(
+          messageId,
+          { $set: updates },
+          { new: true }
+        )
+        .populate({ path: 'sender', select: '-password' })
+        .populate({
+          path: 'replyTo',
+          populate: { path: 'sender', select: '-password' },
+        })
+        .lean()
+        .exec();
+      
+      console.log('[SERVICE] Message edited successfully:', updatedMessage);
+      return updatedMessage;
+    } catch (error) {
+      console.error('[SERVICE] Error editing message:', error);
+      throw error;
+    }
+  }
+
+  async addOrUpdateReaction(
+    messageId: string,
+    userId: string,
+    username: string,
+    reaction: string,
+  ): Promise<{ message: any; action: 'add' | 'remove' }> {
+    const message = await this.messageModel.findById(messageId);
+    if (!message) throw new Error('Message not found');
+
+    // Check if user already has the same reaction
+    const existingReaction = message.userReactions.find(
+      (ur) => ur.userId.toString() === userId,
+    );
+
+    let action: 'add' | 'remove';
+    if (existingReaction && existingReaction.reaction === reaction) {
+      // Remove the reaction if it's the same
+      message.userReactions = message.userReactions.filter(
+        (ur) => ur.userId.toString() !== userId,
+      );
+      action = 'remove';
+    } else {
+      // Remove any existing reaction by this user and add the new one
+      message.userReactions = message.userReactions.filter(
+        (ur) => ur.userId.toString() !== userId,
+      );
+      message.userReactions.push({
+        userId: new Types.ObjectId(userId),
+        username,
+        reaction,
+        createdAt: new Date(),
+      });
+      action = 'add';
+    }
+
+    // Update the reactions count
+    const reactionTypes = ['like', 'love', 'laugh', 'wow', 'sad', 'angry', 'clap', 'fire', 'star'];
+    message.reactions = reactionTypes.reduce((acc, type) => {
+      acc[type] = message.userReactions.filter(
+        (ur) => ur.reaction === type,
+      ).length;
+      return acc;
+    }, {} as any);
+
+    await message.save();
+
+    // Populate userReactions.userId and sender before returning
+    await message.populate('sender', '-password');
+    await message.populate({
+      path: 'userReactions.userId',
+      select: '_id firstName lastName avatar role',
+    });
+
+    return { message, action };
   }
 
   async createGroup(
@@ -203,6 +283,10 @@ export class ChatService {
         .populate({
           path: 'replyTo',
           populate: { path: 'sender', select: '-password' },
+        })
+        .populate({
+          path: 'userReactions.userId',
+          select: '_id firstName lastName avatar role',
         })
         .lean()
         .exec();

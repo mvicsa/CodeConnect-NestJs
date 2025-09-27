@@ -8,7 +8,7 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, ValidationPipe, UsePipes } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ChatService } from './chat.service';
 import { JwtService } from '@nestjs/jwt';
@@ -126,8 +126,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('chat:send_message')
+  @UsePipes(new ValidationPipe({ transform: true }))
   async handleSendMessage(
     @MessageBody() data: CreateMessageDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    console.log('[GATEWAY] Received chat:send_message:', data);
+    const userId = (client as any).userId;
+    if (!userId) {
+      console.log('[GATEWAY] Unauthorized send message attempt');
+      client.emit('chat:error', { message: 'Unauthorized' });
+      return;
+    }
+    console.log('[GATEWAY] Creating message for user:', userId);
+    try {
+      // Create and save the message
+      const message = await this.chatService.createMessage(userId, data);
+      console.log('[GATEWAY] Message created successfully:', message);
+      // Emit to all users in the room except sender
+      client.to(data.roomId).emit('chat:new_message', message);
+      // Optionally, emit to sender as well (for confirmation/UI update)
+      client.emit('chat:new_message', message);
+      console.log('[GATEWAY] Message emitted to room:', data.roomId);
+    } catch (error) {
+      console.error('[GATEWAY] Error creating message:', error);
+      client.emit('chat:error', { message: 'Failed to create message' });
+    }
+  }
+
+  @SubscribeMessage('chat:edit_message')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async handleEditMessage(
+    @MessageBody() data: { roomId: string; messageId: string; updates: any },
     @ConnectedSocket() client: Socket,
   ) {
     const userId = (client as any).userId;
@@ -135,12 +165,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
-    // Create and save the message
-    const message = await this.chatService.createMessage(userId, data);
-    // Emit to all users in the room except sender
-    client.to(data.roomId).emit('chat:new_message', message);
-    // Optionally, emit to sender as well (for confirmation/UI update)
-    client.emit('chat:new_message', message);
+
+    try {
+      // Edit the message
+      const updatedMessage = await this.chatService.editMessage(userId, data.messageId, data.updates);
+      
+      // Emit the updated message to all users in the room
+      this.server.to(data.roomId).emit('chat:message_edited', updatedMessage);
+      
+      // Also emit to sender for confirmation
+      client.emit('chat:message_edited', updatedMessage);
+    } catch (error) {
+      console.error('[GATEWAY] Error editing message:', error);
+      client.emit('chat:error', { message: 'Failed to edit message' });
+    }
   }
 
   @SubscribeMessage('chat:seen')
@@ -244,27 +282,41 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('chat:react_message')
   async handleReactMessage(
-    @MessageBody() data: { roomId: string; messageId: string; emoji: string },
+    @MessageBody() data: { roomId: string; messageId: string; reaction: string },
     @ConnectedSocket() client: Socket,
   ) {
     const userId = (client as any).userId;
+    const username = (client as any).username;
+    console.log('🎯 WebSocket message reaction received:', { data, userId, username });
     if (!userId) {
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
     }
-    const updatedMessage = await this.chatService.reactToMessage(
-      userId,
+    const { message, action } = await this.chatService.addOrUpdateReaction(
       data.messageId,
-      data.emoji,
+      userId,
+      username,
+      data.reaction,
     );
-    // Broadcast updated message to room
+    console.log('🎯 WebSocket reaction processed:', { messageId: message._id, action, reactions: message.reactions });
+    console.log('🎯 Broadcasting to room:', data.roomId);
+    
+    // Get all sockets in the room for debugging
+    const roomSockets = await this.server.in(data.roomId).fetchSockets();
+    console.log('🎯 Sockets in room:', roomSockets.length, 'sockets');
+    
+    // Broadcast updated message to room (including sender)
     this.server
       .to(data.roomId)
       .emit('chat:react_message', {
-        message: updatedMessage,
+        message,
         userId,
-        emoji: data.emoji,
+        reaction: data.reaction,
+        action,
+        roomId: data.roomId,
       });
+    
+    console.log('🎯 Reaction event emitted to room:', data.roomId);
   }
 
   @SubscribeMessage('group:create')

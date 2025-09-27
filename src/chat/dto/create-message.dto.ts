@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum, IsObject } from 'class-validator';
 import { MessageType } from '../../messages/schemas/message.schema';
 
 export class CreateMessageDto {
@@ -16,6 +16,21 @@ export class CreateMessageDto {
   @IsString()
   @IsOptional()
   fileUrl?: string;
+
+  @IsObject()
+  @IsOptional()
+  fileData?: {
+    name?: string;
+    size?: number;
+    type?: string;
+  };
+
+  @IsObject()
+  @IsOptional()
+  codeData?: {
+    code: string;
+    language: string;
+  };
 
   @IsString()
   @IsOptional()
