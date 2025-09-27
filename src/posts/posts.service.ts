@@ -35,7 +35,7 @@ export class PostsService {
       .populate('createdBy', '-password')
       .populate({
         path: 'userReactions.userId',
-        select: '_id firstName lastName avatar role',
+        select: '_id firstName lastName username avatar role',
       })
       .exec();
 
@@ -48,7 +48,7 @@ export class PostsService {
       .populate('createdBy', '-password')
       .populate({
         path: 'userReactions.userId',
-        select: '_id firstName lastName avatar role',
+        select: '_id firstName lastName username avatar role',
       });
 
     if (!post) throw new NotFoundException('Post not found');
@@ -74,7 +74,7 @@ export class PostsService {
     await created.populate('createdBy', '-password');
     await created.populate({
       path: 'userReactions.userId',
-      select: '_id firstName lastName avatar role',
+      select: '_id firstName lastName username avatar role',
     });
 
     // If post contains code, generate AI suggestions synchronously
@@ -131,7 +131,7 @@ export class PostsService {
     await post.populate('createdBy', '-password');
     await post.populate({
       path: 'userReactions.userId',
-      select: '_id firstName lastName avatar role',
+      select: '_id firstName lastName username avatar role',
     });
     return post;
   }
@@ -152,7 +152,7 @@ export class PostsService {
       .populate('createdBy', '-password')
       .populate({
         path: 'userReactions.userId',
-        select: '_id firstName lastName avatar role',
+        select: '_id firstName lastName username avatar role',
       })
       .exec();
   }
@@ -164,7 +164,7 @@ export class PostsService {
       .populate('createdBy', '-password')
       .populate({
         path: 'userReactions.userId',
-        select: '_id firstName lastName avatar role',
+        select: '_id firstName lastName username avatar role',
       })
       .exec();
   }
@@ -188,7 +188,7 @@ export class PostsService {
       .populate('createdBy', '-password')
       .populate({
         path: 'userReactions.userId',
-        select: '_id firstName lastName avatar role',
+        select: '_id firstName lastName username avatar role',
       })
       .exec();
   }
@@ -243,7 +243,7 @@ export class PostsService {
     await post.populate('createdBy', '-password');
     await post.populate({
       path: 'userReactions.userId',
-      select: '_id firstName lastName avatar role',
+      select: '_id firstName lastName username avatar role',
     });
 
     return { post, action };
@@ -313,7 +313,7 @@ export class PostsService {
       .populate('createdBy', '-password')
       .populate({
         path: 'userReactions.userId',
-        select: '_id firstName lastName avatar role',
+        select: '_id firstName lastName username avatar role',
       })
       .exec();
 
@@ -330,7 +330,7 @@ export class PostsService {
           .populate('createdBy', '-password')
           .populate({
             path: 'userReactions.userId',
-            select: '_id firstName lastName avatar role',
+            select: '_id firstName lastName username avatar role',
           })
           .sort({ createdAt: -1 })
           .exec();
