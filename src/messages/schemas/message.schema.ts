@@ -48,38 +48,32 @@ export class Message {
   @Prop({
     type: [{
       userId: { type: Types.ObjectId, ref: 'User' },
-      username: String,
       reaction: String,
       createdAt: { type: Date, default: Date.now }
     }],
     default: [],
   })
-  userReactions: { userId: Types.ObjectId; username: string; reaction: string; createdAt: Date }[];
+  userReactions: { userId: Types.ObjectId; reaction: string; createdAt: Date }[];
 
   @Prop({
     type: {
       like: { type: Number, default: 0 },
       love: { type: Number, default: 0 },
-      laugh: { type: Number, default: 0 },
       wow: { type: Number, default: 0 },
-      sad: { type: Number, default: 0 },
-      angry: { type: Number, default: 0 },
-      clap: { type: Number, default: 0 },
-      fire: { type: Number, default: 0 },
-      star: { type: Number, default: 0 },
+      funny: { type: Number, default: 0 },
+      dislike: { type: Number, default: 0 },
+      happy: { type: Number, default: 0 },
     },
-    default: { like: 0, love: 0, laugh: 0, wow: 0, sad: 0, angry: 0, clap: 0, fire: 0, star: 0 },
+    _id: false,
+    default: { like: 0, love: 0, wow: 0, funny: 0, dislike: 0, happy: 0 },
   })
   reactions: {
     like: number;
     love: number;
-    laugh: number;
     wow: number;
-    sad: number;
-    angry: number;
-    clap: number;
-    fire: number;
-    star: number;
+    funny: number;
+    dislike: number;
+    happy: number;
   };
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })

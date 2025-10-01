@@ -25,7 +25,7 @@ export class ChatService {
       codeData: dto.codeData,
       replyTo: dto.replyTo,
       userReactions: [],
-      reactions: { like: 0, love: 0, laugh: 0, wow: 0, sad: 0, angry: 0, clap: 0, fire: 0, star: 0 },
+      reactions: { like: 0, love: 0, wow: 0, funny: 0, dislike: 0, happy: 0 },
       seenBy: [userId],
       pinned: false,
     });
@@ -43,7 +43,7 @@ export class ChatService {
       })
       .populate({
         path: 'userReactions.userId',
-        select: '_id firstName lastName avatar role',
+        select: '_id username firstName lastName avatar role',
       })
       .lean()
       .exec();
@@ -154,57 +154,68 @@ export class ChatService {
   async addOrUpdateReaction(
     messageId: string,
     userId: string,
-    username: string,
     reaction: string,
   ): Promise<{ message: any; action: 'add' | 'remove' }> {
     const message = await this.messageModel.findById(messageId);
     if (!message) throw new Error('Message not found');
 
-    // Check if user already has the same reaction
-    const existingReaction = message.userReactions.find(
-      (ur) => ur.userId.toString() === userId,
+    const allowedReactions = ['like', 'love', 'wow', 'funny', 'dislike', 'happy'];
+    if (!allowedReactions.includes(reaction)) {
+      throw new Error('Invalid reaction type');
+    }
+
+    const userObjectId = new Types.ObjectId(userId);
+
+    const existing = (message.userReactions || []).find((ur: any) =>
+      userObjectId.equals(ur.userId),
     );
 
     let action: 'add' | 'remove';
-    if (existingReaction && existingReaction.reaction === reaction) {
-      // Remove the reaction if it's the same
-      message.userReactions = message.userReactions.filter(
-        (ur) => ur.userId.toString() !== userId,
-      );
+    let updatedUserReactions = (message.userReactions || []).filter(
+      (ur: any) => !userObjectId.equals(ur.userId),
+    );
+
+    if (existing && existing.reaction === reaction) {
       action = 'remove';
     } else {
-      // Remove any existing reaction by this user and add the new one
-      message.userReactions = message.userReactions.filter(
-        (ur) => ur.userId.toString() !== userId,
-      );
-      message.userReactions.push({
-        userId: new Types.ObjectId(userId),
-        username,
+      updatedUserReactions.push({
+        userId: userObjectId,
         reaction,
         createdAt: new Date(),
-      });
+      } as any);
       action = 'add';
     }
 
-    // Update the reactions count
-    const reactionTypes = ['like', 'love', 'laugh', 'wow', 'sad', 'angry', 'clap', 'fire', 'star'];
-    message.reactions = reactionTypes.reduce((acc, type) => {
-      acc[type] = message.userReactions.filter(
-        (ur) => ur.reaction === type,
-      ).length;
+    const reactionsCount = allowedReactions.reduce((acc: any, type) => {
+      acc[type] = updatedUserReactions.filter((ur: any) => ur.reaction === type).length;
       return acc;
     }, {} as any);
 
-    await message.save();
+    // Atomic update to ensure persistence
+    const updated = await this.messageModel
+      .findByIdAndUpdate(
+        messageId,
+        {
+          $set: {
+            userReactions: updatedUserReactions,
+            'reactions.like': reactionsCount.like || 0,
+            'reactions.love': reactionsCount.love || 0,
+            'reactions.wow': reactionsCount.wow || 0,
+            'reactions.funny': reactionsCount.funny || 0,
+            'reactions.dislike': reactionsCount.dislike || 0,
+            'reactions.happy': reactionsCount.happy || 0,
+          },
+        },
+        { new: true },
+      )
+      .populate('sender', '-password')
+      .populate({
+        path: 'userReactions.userId',
+        select: '_id username firstName lastName avatar role',
+      })
+      .exec();
 
-    // Populate userReactions.userId and sender before returning
-    await message.populate('sender', '-password');
-    await message.populate({
-      path: 'userReactions.userId',
-      select: '_id firstName lastName avatar role',
-    });
-
-    return { message, action };
+    return { message: updated, action };
   }
 
   async createGroup(
@@ -286,7 +297,7 @@ export class ChatService {
         })
         .populate({
           path: 'userReactions.userId',
-          select: '_id firstName lastName avatar role',
+        select: '_id username firstName lastName avatar role',
         })
         .lean()
         .exec();

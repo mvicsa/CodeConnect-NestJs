@@ -130,7 +130,6 @@ export class ChatController {
     const { message, action } = await this.chatService.addOrUpdateReaction(
       messageId,
       req.user.sub,
-      req.user.username,
       body.reaction,
     );
 

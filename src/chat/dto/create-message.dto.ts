@@ -7,8 +7,8 @@ export class CreateMessageDto {
   roomId: string;
 
   @IsString()
-  @IsNotEmpty()
-  content: string;
+  @IsOptional()
+  content?: string;
 
   @IsEnum(MessageType)
   type: MessageType;

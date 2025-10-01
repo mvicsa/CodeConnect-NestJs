@@ -286,8 +286,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: Socket,
   ) {
     const userId = (client as any).userId;
-    const username = (client as any).username;
-    console.log('🎯 WebSocket message reaction received:', { data, userId, username });
+    console.log('🎯 WebSocket message reaction received:', { data, userId });
     if (!userId) {
       client.emit('chat:error', { message: 'Unauthorized' });
       return;
@@ -295,7 +294,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const { message, action } = await this.chatService.addOrUpdateReaction(
       data.messageId,
       userId,
-      username,
       data.reaction,
     );
     console.log('🎯 WebSocket reaction processed:', { messageId: message._id, action, reactions: message.reactions });
