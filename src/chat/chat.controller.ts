@@ -17,7 +17,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FileUploadService } from './file-upload.service';
 import { ChatService } from './chat.service';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import {
   ApiBearerAuth,
   ApiTags,
@@ -26,6 +26,7 @@ import {
   ApiUnauthorizedResponse,
   ApiNotFoundResponse,
   ApiOperation,
+  ApiBody,
 } from '@nestjs/swagger';
 
 @ApiBearerAuth()
@@ -105,5 +106,34 @@ export class ChatController {
   async removeUserFromRoom(@Req() req, @Param('roomId') roomId: string) {
     const userId = req.user._id || req.user.id || req.user.sub;
     return await this.chatService.removeUserFromRoom(roomId, userId);
+  }
+
+  @Post('messages/:messageId/reactions')
+  @ApiOperation({ summary: 'Add or update a reaction to a message' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { reaction: { type: 'string', example: 'like' } },
+      required: ['reaction'],
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The updated message with new reactions',
+  })
+  async addReaction(
+    @Param('messageId') messageId: string,
+    @Body() body: { reaction: string },
+    @Req() req: Request & { user: any },
+  ) {
+    console.log('🎯 Message reaction API called:', { messageId, reaction: body.reaction, userId: req.user.sub });
+    const { message, action } = await this.chatService.addOrUpdateReaction(
+      messageId,
+      req.user.sub,
+      body.reaction,
+    );
+
+    console.log('🎯 Message reaction result:', { message: message._id, action, reactions: message.reactions });
+    return { message, action };
   }
 }

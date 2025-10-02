@@ -13,6 +13,7 @@ export class ChatService {
   ) {}
 
   async createMessage(userId: string, dto: CreateMessageDto) {
+    console.log('[SERVICE] Creating message with data:', { userId, dto });
     // Validate room membership (optional: can be added for security)
     const message = new this.messageModel({
       chatRoom: new Types.ObjectId(dto.roomId), // Convert to ObjectId
@@ -20,23 +21,35 @@ export class ChatService {
       content: dto.content,
       type: dto.type,
       fileUrl: dto.fileUrl,
+      fileData: dto.fileData,
+      codeData: dto.codeData,
       replyTo: dto.replyTo,
-      reactions: [],
+      userReactions: [],
+      reactions: { like: 0, love: 0, wow: 0, funny: 0, dislike: 0, happy: 0 },
       seenBy: [userId],
       pinned: false,
     });
+    console.log('[SERVICE] Message model created:', message);
     await message.save();
+    console.log('[SERVICE] Message saved to database with ID:', message._id);
 
     // Return populated message
-    return this.messageModel
+    const populatedMessage = await this.messageModel
       .findById(message._id)
       .populate({ path: 'sender', select: '-password' })
       .populate({
         path: 'replyTo',
         populate: { path: 'sender', select: '-password' },
       })
+      .populate({
+        path: 'userReactions.userId',
+        select: '_id username firstName lastName avatar role',
+      })
       .lean()
       .exec();
+    
+    console.log('[SERVICE] Populated message returned:', populatedMessage);
+    return populatedMessage;
   }
 
   async markMessagesAsSeen(userId: string, messageIds: string[]) {
@@ -101,30 +114,108 @@ export class ChatService {
     }
   }
 
-  async reactToMessage(userId: string, messageId: string, emoji: string) {
-    // Remove previous reaction by this user, then add new one
-    await this.messageModel
-      .findByIdAndUpdate(messageId, { $pull: { reactions: { user: userId } } })
-      .exec();
-    await this.messageModel
-      .findByIdAndUpdate(messageId, {
-        $push: { reactions: { user: userId, emoji } },
-      })
-      .exec();
-    // Return populated message
-    return this.messageModel
-      .findById(messageId)
-      .populate({ path: 'sender', select: '-password' })
+  async editMessage(userId: string, messageId: string, updates: any) {
+    console.log('[SERVICE] Editing message:', { userId, messageId, updates });
+    
+    try {
+      // Check if user is the sender of the message
+      const message = await this.messageModel.findById(messageId);
+      if (!message) {
+        throw new Error('Message not found');
+      }
+      
+      if (message.sender.toString() !== userId) {
+        throw new Error('Unauthorized to edit this message');
+      }
+      
+      // Update the message with the new data
+      const updatedMessage = await this.messageModel
+        .findByIdAndUpdate(
+          messageId,
+          { $set: updates },
+          { new: true }
+        )
+        .populate({ path: 'sender', select: '-password' })
+        .populate({
+          path: 'replyTo',
+          populate: { path: 'sender', select: '-password' },
+        })
+        .lean()
+        .exec();
+      
+      console.log('[SERVICE] Message edited successfully:', updatedMessage);
+      return updatedMessage;
+    } catch (error) {
+      console.error('[SERVICE] Error editing message:', error);
+      throw error;
+    }
+  }
+
+  async addOrUpdateReaction(
+    messageId: string,
+    userId: string,
+    reaction: string,
+  ): Promise<{ message: any; action: 'add' | 'remove' }> {
+    const message = await this.messageModel.findById(messageId);
+    if (!message) throw new Error('Message not found');
+
+    const allowedReactions = ['like', 'love', 'wow', 'funny', 'dislike', 'happy'];
+    if (!allowedReactions.includes(reaction)) {
+      throw new Error('Invalid reaction type');
+    }
+
+    const userObjectId = new Types.ObjectId(userId);
+
+    const existing = (message.userReactions || []).find((ur: any) =>
+      userObjectId.equals(ur.userId),
+    );
+
+    let action: 'add' | 'remove';
+    let updatedUserReactions = (message.userReactions || []).filter(
+      (ur: any) => !userObjectId.equals(ur.userId),
+    );
+
+    if (existing && existing.reaction === reaction) {
+      action = 'remove';
+    } else {
+      updatedUserReactions.push({
+        userId: userObjectId,
+        reaction,
+        createdAt: new Date(),
+      } as any);
+      action = 'add';
+    }
+
+    const reactionsCount = allowedReactions.reduce((acc: any, type) => {
+      acc[type] = updatedUserReactions.filter((ur: any) => ur.reaction === type).length;
+      return acc;
+    }, {} as any);
+
+    // Atomic update to ensure persistence
+    const updated = await this.messageModel
+      .findByIdAndUpdate(
+        messageId,
+        {
+          $set: {
+            userReactions: updatedUserReactions,
+            'reactions.like': reactionsCount.like || 0,
+            'reactions.love': reactionsCount.love || 0,
+            'reactions.wow': reactionsCount.wow || 0,
+            'reactions.funny': reactionsCount.funny || 0,
+            'reactions.dislike': reactionsCount.dislike || 0,
+            'reactions.happy': reactionsCount.happy || 0,
+          },
+        },
+        { new: true },
+      )
+      .populate('sender', '-password')
       .populate({
-        path: 'replyTo',
-        populate: { path: 'sender', select: '-password' },
+        path: 'userReactions.userId',
+        select: '_id username firstName lastName avatar role',
       })
-      .populate({
-        path: 'reactions.user',
-        select: '-password',
-      })
-      .lean()
       .exec();
+
+    return { message: updated, action };
   }
 
   async createGroup(
@@ -203,6 +294,10 @@ export class ChatService {
         .populate({
           path: 'replyTo',
           populate: { path: 'sender', select: '-password' },
+        })
+        .populate({
+          path: 'userReactions.userId',
+        select: '_id username firstName lastName avatar role',
         })
         .lean()
         .exec();
