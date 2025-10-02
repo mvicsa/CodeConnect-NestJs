@@ -108,6 +108,15 @@ export class ChatController {
     return await this.chatService.removeUserFromRoom(roomId, userId);
   }
 
+  @Post('migrate/reactions')
+  @ApiOperation({ summary: 'Backfill missing reactions fields on old messages' })
+  async migrateReactions(@Req() req: Request & { user: any }) {
+    // Optional: only allow admins
+    // if (req.user?.role !== 'admin') throw new Error('Unauthorized');
+    const result = await this.chatService.migrateMissingReactionsFields();
+    return { migrated: true, ...result };
+  }
+
   @Post('messages/:messageId/reactions')
   @ApiOperation({ summary: 'Add or update a reaction to a message' })
   @ApiBody({

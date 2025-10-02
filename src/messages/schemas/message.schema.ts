@@ -83,6 +83,9 @@ export class Message {
   pinned: boolean;
 
   @Prop({ default: false })
+  edited: boolean;
+
+  @Prop({ default: false })
   deleted: boolean;
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })

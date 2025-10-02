@@ -128,11 +128,11 @@ export class ChatService {
         throw new Error('Unauthorized to edit this message');
       }
       
-      // Update the message with the new data
+      // Update the message with the new data and mark as edited
       const updatedMessage = await this.messageModel
         .findByIdAndUpdate(
           messageId,
-          { $set: updates },
+          { $set: { ...updates, edited: true } },
           { new: true }
         )
         .populate({ path: 'sender', select: '-password' })
@@ -166,12 +166,24 @@ export class ChatService {
 
     const userObjectId = new Types.ObjectId(userId);
 
-    const existing = (message.userReactions || []).find((ur: any) =>
+    // Normalize legacy data for old messages
+    const normalizedUserReactions: any[] = Array.isArray(message.userReactions)
+      ? message.userReactions.map((ur: any) => ({
+          userId:
+            ur?.userId instanceof Types.ObjectId
+              ? ur.userId
+              : new Types.ObjectId(ur.userId),
+          reaction: ur?.reaction,
+          createdAt: ur?.createdAt ? new Date(ur.createdAt) : new Date(),
+        }))
+      : [];
+
+    const existing = normalizedUserReactions.find((ur: any) =>
       userObjectId.equals(ur.userId),
     );
 
     let action: 'add' | 'remove';
-    let updatedUserReactions = (message.userReactions || []).filter(
+    let updatedUserReactions = normalizedUserReactions.filter(
       (ur: any) => !userObjectId.equals(ur.userId),
     );
 
@@ -191,19 +203,21 @@ export class ChatService {
       return acc;
     }, {} as any);
 
-    // Atomic update to ensure persistence
+    // Atomic update to ensure persistence and correct shape (object, not array)
     const updated = await this.messageModel
       .findByIdAndUpdate(
         messageId,
         {
           $set: {
             userReactions: updatedUserReactions,
-            'reactions.like': reactionsCount.like || 0,
-            'reactions.love': reactionsCount.love || 0,
-            'reactions.wow': reactionsCount.wow || 0,
-            'reactions.funny': reactionsCount.funny || 0,
-            'reactions.dislike': reactionsCount.dislike || 0,
-            'reactions.happy': reactionsCount.happy || 0,
+            reactions: {
+              like: reactionsCount.like || 0,
+              love: reactionsCount.love || 0,
+              wow: reactionsCount.wow || 0,
+              funny: reactionsCount.funny || 0,
+              dislike: reactionsCount.dislike || 0,
+              happy: reactionsCount.happy || 0,
+            },
           },
         },
         { new: true },
@@ -386,6 +400,36 @@ export class ChatService {
     );
 
     return roomsWithMessages;
+  }
+
+  /**
+   * Backfill old messages that are missing reaction fields.
+   * - Ensures userReactions is an array
+   * - Ensures reactions object exists with all counters set to 0
+   */
+  async migrateMissingReactionsFields() {
+    const zeroReactions = {
+      like: 0,
+      love: 0,
+      wow: 0,
+      funny: 0,
+      dislike: 0,
+      happy: 0,
+    } as any;
+
+    // Initialize missing userReactions to empty array
+    const initUserReactions = await this.messageModel.updateMany(
+      { $or: [ { userReactions: { $exists: false } }, { userReactions: null } ] },
+      { $set: { userReactions: [] } },
+    ).exec();
+
+    // Initialize missing reactions object
+    const initReactions = await this.messageModel.updateMany(
+      { $or: [ { reactions: { $exists: false } }, { reactions: null } ] },
+      { $set: { reactions: zeroReactions } },
+    ).exec();
+
+    return { initUserReactions, initReactions };
   }
 
   async createPrivateRoom(senderId: string, receiverId: string) {
