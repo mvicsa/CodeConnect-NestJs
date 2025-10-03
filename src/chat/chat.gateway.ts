@@ -143,10 +143,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Create and save the message
       const message = await this.chatService.createMessage(userId, data);
       console.log('[GATEWAY] Message created successfully:', message);
+      
+      // Calculate lastActivity dynamically
+      const lastActivity = await this.chatService.calculateLastActivity(data.roomId);
+      
       // Emit to all users in the room except sender
-      client.to(data.roomId).emit('chat:new_message', message);
+      client.to(data.roomId).emit('chat:new_message', { 
+        ...message, 
+        lastActivity 
+      });
       // Optionally, emit to sender as well (for confirmation/UI update)
-      client.emit('chat:new_message', message);
+      client.emit('chat:new_message', { 
+        ...message, 
+        lastActivity 
+      });
       console.log('[GATEWAY] Message emitted to room:', data.roomId);
     } catch (error) {
       console.error('[GATEWAY] Error creating message:', error);
@@ -303,6 +313,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const roomSockets = await this.server.in(data.roomId).fetchSockets();
     console.log('🎯 Sockets in room:', roomSockets.length, 'sockets');
     
+    // Calculate lastActivity dynamically after reaction
+    const lastActivity = await this.chatService.calculateLastActivity(data.roomId);
+    
     // Broadcast updated message to room (including sender)
     this.server
       .to(data.roomId)
@@ -312,6 +325,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         reaction: data.reaction,
         action,
         roomId: data.roomId,
+        lastActivity
       });
     
     console.log('🎯 Reaction event emitted to room:', data.roomId);

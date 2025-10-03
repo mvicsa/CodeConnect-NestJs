@@ -232,6 +232,97 @@ export class ChatService {
     return { message: updated, action };
   }
 
+  /**
+   * Calculate lastActivity dynamically for a chat room
+   * Returns the most recent activity (message or reaction)
+   */
+  async calculateLastActivity(roomId: string) {
+    // Convert roomId to ObjectId if needed
+    const roomObjectId = new Types.ObjectId(roomId);
+    
+    // Get the latest message in the room
+    const latestMessage = await this.messageModel
+      .findOne({ chatRoom: roomObjectId })
+      .sort({ createdAt: -1 })
+      .populate({ path: 'sender', select: 'username firstName lastName avatar' })
+      .lean()
+      .exec();
+
+    if (!latestMessage) {
+      
+      // If no messages, get room creation time as fallback
+      const room = await this.chatRoomModel.findById(roomObjectId).lean().exec();
+      if (room) {
+        return {
+          type: 'message' as const,
+          time: (room as any).createdAt || new Date(),
+          messageId: null,
+          message: null,
+          isRoomCreation: true
+        };
+      }
+      
+      return null;
+    }
+
+    // Find the latest reaction across all messages in the room
+    const messagesWithReactions = await this.messageModel
+      .find({ 
+        chatRoom: roomObjectId,
+        'userReactions.0': { $exists: true } // Only messages that have reactions
+      })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+
+    let latestReaction: any = null;
+    let latestReactionTime: Date | null = null;
+
+    // Find the most recent reaction
+    for (const message of messagesWithReactions) {
+      if (message.userReactions && Array.isArray(message.userReactions)) {
+        for (const userReaction of message.userReactions) {
+          const reactionTime = new Date((userReaction as any).createdAt);
+          if (!latestReactionTime || reactionTime > latestReactionTime) {
+            latestReactionTime = reactionTime;
+            latestReaction = {
+              type: 'reaction' as const,
+              time: reactionTime,
+              messageId: message._id,
+              reaction: (userReaction as any).reaction,
+              userId: (userReaction as any).userId,
+            };
+          }
+        }
+      }
+    }
+
+    // Compare latest message time with latest reaction time
+    const messageTime = new Date((latestMessage as any).createdAt);
+    
+    if (latestReaction && latestReactionTime && latestReactionTime > messageTime) {
+      // Latest activity is a reaction - populate the userId manually
+      const User = this.messageModel.db.model('User');
+      const populatedUser = await User.findById(latestReaction.userId)
+        .select('username firstName lastName avatar')
+        .lean()
+        .exec();
+      
+      return {
+        ...latestReaction,
+        userId: populatedUser
+      };
+    } else {
+      // Latest activity is a message
+      return {
+        type: 'message' as const,
+        time: messageTime,
+        messageId: latestMessage._id,
+        message: latestMessage
+      };
+    }
+  }
+
   async createGroup(
     creatorId: string,
     title: string,
@@ -390,11 +481,15 @@ export class ChatService {
           sender: { $ne: userId },
         });
 
+        // Calculate lastActivity dynamically
+        const lastActivity = await this.calculateLastActivity(room._id.toString());
+
         return {
           ...room,
           messages: messages.reverse(), // Return messages in chronological order
           unreadCount,
           lastMessage: messages[0] || null,
+          lastActivity,
         };
       }),
     );
