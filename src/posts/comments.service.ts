@@ -182,11 +182,23 @@ export class CommentsService {
     const filter = { parentCommentId: new Types.ObjectId(parentId) } as any;
     const total = await this.commentModel.countDocuments(filter);
 
-    const excludeHighlighted = highlightId
+    // التحقق أولاً من صحة الـ highlight قبل تطبيق excludeHighlighted
+    let isValidHighlight = false;
+    let highlightedReply: any = null;
+
+    if (highlightId) {
+      highlightedReply = await this.commentModel
+        .findOne({ _id: highlightId, parentCommentId: new Types.ObjectId(parentId) })
+        .lean();
+      isValidHighlight = !!highlightedReply;
+    }
+
+    // تطبيق excludeHighlighted فقط إذا كان الـ highlight صحيحاً
+    const excludeHighlighted = isValidHighlight
       ? { _id: { $ne: new Types.ObjectId(highlightId) } }
       : {};
-    const effectiveOffset = highlightId ? Math.max(0, offset - 1) : offset;
-    const baseLimit = highlightId && offset === 0 ? Math.max(0, limit - 1) : limit;
+    const effectiveOffset = isValidHighlight ? Math.max(0, offset - 1) : offset;
+    const baseLimit = isValidHighlight && offset === 0 ? Math.max(0, limit - 1) : limit;
 
     const baseQuery = this.commentModel
       .find({ ...filter, ...excludeHighlighted })
@@ -202,9 +214,10 @@ export class CommentsService {
 
     let replies = await baseQuery.exec();
 
-    if (highlightId && offset === 0) {
+    if (isValidHighlight && offset === 0 && highlightedReply) {
+      // إعادة جلب الـ reply مع البيانات الكاملة (populate)
       const highlighted = await this.commentModel
-        .findOne({ _id: highlightId, parentCommentId: new Types.ObjectId(parentId) })
+        .findById(highlightId)
         .populate('createdBy', '-password')
         .populate({
           path: 'userReactions.userId',
