@@ -58,6 +58,191 @@ export class CommentsService {
     private aiCommentEvalModel: Model<any>, // Inject model for AICommentEvaluation
   ) {}
 
+  private async addRepliesCountToComment(doc: any): Promise<any> {
+    const commentId = (doc && (doc._id?.toString ? doc._id.toString() : doc._id)) as string;
+    const repliesCount = await this.commentModel.countDocuments({
+      parentCommentId: new Types.ObjectId(commentId),
+    });
+    const obj = doc && doc.toObject ? doc.toObject() : doc;
+    return { ...obj, repliesCount };
+  }
+
+  private async addRepliesCountToList(list: any[]): Promise<any[]> {
+    return Promise.all(list.map((c) => this.addRepliesCountToComment(c)));
+  }
+
+  // Get a single comment context (detect if reply and return parent if needed)
+  async getCommentContext(commentId: string): Promise<{
+    comment: any;
+    isReply: boolean;
+    parentComment?: any;
+    postId: string;
+  }> {
+    const comment = await this.commentModel
+      .findById(commentId)
+      .populate('createdBy', '-password')
+      .populate({
+        path: 'userReactions.userId',
+        select: '_id firstName lastName username avatar role',
+      })
+      .lean();
+    if (!comment) throw new NotFoundException('Comment not found');
+
+    let parentComment: any | undefined;
+    const isReply = !!comment.parentCommentId;
+    if (isReply) {
+      parentComment = await this.commentModel
+        .findById(comment.parentCommentId)
+        .populate('createdBy', '-password')
+        .populate({
+          path: 'userReactions.userId',
+          select: '_id firstName lastName username avatar role',
+        })
+        .lean();
+    }
+
+    const commentWithCount = await this.addRepliesCountToComment(comment);
+
+    return {
+      comment: commentWithCount,
+      isReply,
+      parentComment,
+      postId: comment.postId.toString(),
+    };
+  }
+
+  // Get post comments with a highlighted comment first
+  async getCommentsWithHighlight(
+    postId: string,
+    highlightId?: string,
+    limit = 10,
+    offset = 0,
+  ): Promise<{ comments: any[]; total: number; hasMore: boolean }> {
+    const filter = { postId: new Types.ObjectId(postId), parentCommentId: null } as any;
+    const total = await this.commentModel.countDocuments(filter);
+
+    // Build base query excluding highlighted (for stable ordering)
+    const excludeHighlighted = highlightId
+      ? { _id: { $ne: new Types.ObjectId(highlightId) } }
+      : {};
+    const effectiveOffset = highlightId ? Math.max(0, offset - 1) : offset;
+    const baseLimit = highlightId && offset === 0 ? Math.max(0, limit - 1) : limit;
+
+    const baseQuery = this.commentModel
+      .find({ ...filter, ...excludeHighlighted })
+      .sort({ createdAt: -1 })
+      .skip(effectiveOffset)
+      .limit(baseLimit)
+      .populate('createdBy', '-password')
+      .populate({
+        path: 'userReactions.userId',
+        select: '_id firstName lastName username avatar role',
+      })
+      .lean();
+
+    let comments = await baseQuery.exec();
+
+    // If highlight is provided and is a top-level comment, bring it to the front
+    if (highlightId && offset === 0) {
+      const highlighted = await this.commentModel
+        .findOne({ _id: highlightId, parentCommentId: null })
+        .populate('createdBy', '-password')
+        .populate({
+          path: 'userReactions.userId',
+          select: '_id firstName lastName username avatar role',
+        })
+        .lean();
+      if (highlighted) {
+        // mark highlighted and place at the START of the first page
+        (highlighted as any).isHighlighted = true;
+        comments = [highlighted, ...comments];
+      }
+    }
+
+    // Enforce final page size cap
+    if (comments.length > limit) {
+      comments = comments.slice(0, limit);
+    }
+
+    // Attach repliesCount to each comment
+    const commentsWithCounts = await this.addRepliesCountToList(comments);
+
+    const safeOffset = Math.max(0, offset);
+    const hasMore = safeOffset + Math.max(1, limit) < total;
+    return { comments: commentsWithCounts, total, hasMore };
+  }
+
+  // Get replies with a highlighted reply first
+  async getRepliesWithHighlight(
+    parentId: string,
+    highlightId?: string,
+    limit = 10,
+    offset = 0,
+  ): Promise<{ replies: any[]; total: number; hasMore: boolean }> {
+    const filter = { parentCommentId: new Types.ObjectId(parentId) } as any;
+    const total = await this.commentModel.countDocuments(filter);
+
+    // التحقق أولاً من صحة الـ highlight قبل تطبيق excludeHighlighted
+    let isValidHighlight = false;
+    let highlightedReply: any = null;
+
+    if (highlightId) {
+      highlightedReply = await this.commentModel
+        .findOne({ _id: highlightId, parentCommentId: new Types.ObjectId(parentId) })
+        .lean();
+      isValidHighlight = !!highlightedReply;
+    }
+
+    // تطبيق excludeHighlighted فقط إذا كان الـ highlight صحيحاً
+    const excludeHighlighted = isValidHighlight
+      ? { _id: { $ne: new Types.ObjectId(highlightId) } }
+      : {};
+    const effectiveOffset = isValidHighlight ? Math.max(0, offset - 1) : offset;
+    const baseLimit = isValidHighlight && offset === 0 ? Math.max(0, limit - 1) : limit;
+
+    const baseQuery = this.commentModel
+      .find({ ...filter, ...excludeHighlighted })
+      .sort({ createdAt: -1 })
+      .skip(effectiveOffset)
+      .limit(baseLimit)
+      .populate('createdBy', '-password')
+      .populate({
+        path: 'userReactions.userId',
+        select: '_id firstName lastName username avatar role',
+      })
+      .lean();
+
+    let replies = await baseQuery.exec();
+
+    if (isValidHighlight && offset === 0 && highlightedReply) {
+      // إعادة جلب الـ reply مع البيانات الكاملة (populate)
+      const highlighted = await this.commentModel
+        .findById(highlightId)
+        .populate('createdBy', '-password')
+        .populate({
+          path: 'userReactions.userId',
+          select: '_id firstName lastName username avatar role',
+        })
+        .lean();
+      if (highlighted) {
+        // mark highlighted and place at the START of the first page
+        (highlighted as any).isHighlighted = true;
+        replies = [highlighted, ...replies];
+      }
+    }
+
+    // Enforce final page size cap
+    if (replies.length > limit) {
+      replies = replies.slice(0, limit);
+    }
+
+    // Attach repliesCount for each reply (depth-2 counts)
+    const repliesWithCounts = await this.addRepliesCountToList(replies);
+
+    const safeOffset = Math.max(0, offset);
+    const hasMore = safeOffset + Math.max(1, limit) < total;
+    return { replies: repliesWithCounts, total, hasMore };
+  }
   async create(
     data: Omit<Comment, 'createdBy'>,
     userId: string,
@@ -188,7 +373,7 @@ export class CommentsService {
   }
 
   async findByPost(postId: string): Promise<Comment[]> {
-    return this.commentModel
+    const docs = await this.commentModel
       .find({ postId, parentCommentId: null })
       .populate('createdBy', '-password')
       .populate({
@@ -196,10 +381,11 @@ export class CommentsService {
         select: '_id firstName lastName username avatar role',
       })
       .exec();
+    return this.addRepliesCountToList(docs) as unknown as Comment[];
   }
 
   async findReplies(parentCommentId: string): Promise<Comment[]> {
-    return this.commentModel
+    const docs = await this.commentModel
       .find({ parentCommentId })
       .populate('createdBy', '-password')
       .populate({
@@ -207,6 +393,7 @@ export class CommentsService {
         select: '_id firstName lastName username avatar role',
       })
       .exec();
+    return this.addRepliesCountToList(docs) as unknown as Comment[];
   }
 
   async update(

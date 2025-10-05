@@ -16,6 +16,7 @@ import {
   Inject,
   NotFoundException,
   ForbiddenException,
+  Query,
 } from '@nestjs/common';
 import { CommentsService } from './comments.service';
 import { Comment as CommentModel } from './shemas/comment.schema';
@@ -33,6 +34,7 @@ import {
   ApiConflictResponse,
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { ClientProxy } from '@nestjs/microservices';
 import { NotificationType } from 'src/notification/entities/notification.schema';
@@ -111,27 +113,64 @@ export class CommentsController {
     }
   }
 
+  // Get single comment context (detect reply and include parent if needed)
+  @Get(':commentId/context')
+  @ApiOperation({ summary: 'Get a comment with its context (parent if reply)' })
+  @ApiParam({ name: 'commentId', type: String })
+  @ApiResponse({ status: 200, description: 'Comment context with parent if exists' })
+  async getCommentContext(@Param('commentId') commentId: string) {
+    return this.commentsService.getCommentContext(commentId);
+  }
+
   @Get('post/:postId')
-  @ApiOperation({ summary: 'Get all top-level comments for a post' })
+  @ApiOperation({ summary: 'Get post comments (supports highlight + pagination)' })
   @ApiParam({ name: 'postId', type: String })
+  @ApiQuery({ name: 'highlight', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'offset', required: false, type: Number, example: 0 })
   @ApiResponse({
     status: 200,
     description: 'List of comments for the post',
     type: [CommentModel],
   })
-  async findByPost(@Param('postId') postId: string) {
+  async findByPost(
+    @Param('postId') postId: string,
+    @Query('highlight') highlight?: string,
+    @Query('limit') limit: string = '10',
+    @Query('offset') offset: string = '0',
+  ) {
+    // If highlight/limit/offset provided, use the optimized backend pagination
+    if (highlight || typeof limit !== 'undefined' || typeof offset !== 'undefined') {
+      const parsedLimit = Math.max(1, Number(limit) || 10);
+      const parsedOffset = Math.max(0, Number(offset) || 0);
+      return this.commentsService.getCommentsWithHighlight(postId, highlight, parsedLimit, parsedOffset);
+    }
+    // Fallback to legacy behavior
     return this.commentsService.findByPost(postId);
   }
 
   @Get('replies/:parentCommentId')
-  @ApiOperation({ summary: 'Get replies for a comment' })
+  @ApiOperation({ summary: 'Get replies for a comment (supports highlight + pagination)' })
   @ApiParam({ name: 'parentCommentId', type: String })
+  @ApiQuery({ name: 'highlight', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiQuery({ name: 'offset', required: false, type: Number, example: 0 })
   @ApiResponse({
     status: 200,
     description: 'List of replies for the comment',
     type: [CommentModel],
   })
-  async findReplies(@Param('parentCommentId') parentCommentId: string) {
+  async findReplies(
+    @Param('parentCommentId') parentCommentId: string,
+    @Query('highlight') highlight?: string,
+    @Query('limit') limit: string = '10',
+    @Query('offset') offset: string = '0',
+  ) {
+    if (highlight || typeof limit !== 'undefined' || typeof offset !== 'undefined') {
+      const parsedLimit = Math.max(1, Number(limit) || 10);
+      const parsedOffset = Math.max(0, Number(offset) || 0);
+      return this.commentsService.getRepliesWithHighlight(parentCommentId, highlight, parsedLimit, parsedOffset);
+    }
     return this.commentsService.findReplies(parentCommentId);
   }
 

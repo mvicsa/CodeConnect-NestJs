@@ -26,6 +26,52 @@ export class PostsService {
     @InjectModel(AICommentEvaluation.name) private aiCommentEvalModel: Model<any>, // Inject AICommentEvaluation model
   ) {}
 
+  /**
+   * Calculate counts for a post (comments, replies, AI suggestions)
+   */
+  private async calculatePostCounts(postId: string): Promise<{
+    commentsCount: number;
+    repliesCount: number;
+    aiSuggestionsCount: number;
+  }> {
+    const [commentsCount, repliesCount, aiSuggestionsCount] = await Promise.all([
+      // Count top-level comments (parentCommentId is null)
+      this.commentModel.countDocuments({
+        postId: new Types.ObjectId(postId),
+        parentCommentId: null,
+      }),
+      // Count replies (parentCommentId is not null)
+      this.commentModel.countDocuments({
+        postId: new Types.ObjectId(postId),
+        parentCommentId: { $ne: null },
+      }),
+      // Count AI suggestions
+      this.codeSuggestionModel.countDocuments({
+        postId: new Types.ObjectId(postId),
+      }),
+    ]);
+
+    return { commentsCount, repliesCount, aiSuggestionsCount };
+  }
+
+  /**
+   * Add counts to a post object
+   */
+  private async addCountsToPost(post: any): Promise<any> {
+    const counts = await this.calculatePostCounts(post._id.toString());
+    return {
+      ...post.toObject ? post.toObject() : post,
+      ...counts,
+    };
+  }
+
+  /**
+   * Add counts to multiple posts
+   */
+  private async addCountsToPosts(posts: any[]): Promise<any[]> {
+    return Promise.all(posts.map(post => this.addCountsToPost(post)));
+  }
+
   async findAll(page = 1, limit = 10): Promise<Post[]> {
     const posts = await this.postModel
       .find()
@@ -39,7 +85,7 @@ export class PostsService {
       })
       .exec();
 
-    return posts;
+    return this.addCountsToPosts(posts);
   }
 
   async findOne(_id: string): Promise<Post> {
@@ -52,7 +98,7 @@ export class PostsService {
       });
 
     if (!post) throw new NotFoundException('Post not found');
-    return post;
+    return this.addCountsToPost(post);
   }
 
   private validateTags(tags?: any[]): void {
@@ -104,7 +150,7 @@ export class PostsService {
       }
     }
 
-    return created;
+    return this.addCountsToPost(created);
   }
 
   // Get code suggestions for a post
@@ -133,7 +179,7 @@ export class PostsService {
       path: 'userReactions.userId',
       select: '_id firstName lastName username avatar role',
     });
-    return post;
+    return this.addCountsToPost(post);
   }
 
   async delete(_id: string, userId: string): Promise<void> {
@@ -145,9 +191,8 @@ export class PostsService {
   }
 
   async findByTag(tag: string): Promise<Post[]> {
-    return this.postModel
+    const posts = await this.postModel
       .find({ tags: { $regex: new RegExp(`^${tag}$`, 'i') } })
-
       .sort({ createdAt: -1 })
       .populate('createdBy', '-password')
       .populate({
@@ -155,10 +200,12 @@ export class PostsService {
         select: '_id firstName lastName username avatar role',
       })
       .exec();
+    
+    return this.addCountsToPosts(posts);
   }
 
   async findByUser(userId: string): Promise<Post[]> {
-    return this.postModel
+    const posts = await this.postModel
       .find({ createdBy: userId })
       .sort({ createdAt: -1 })
       .populate('createdBy', '-password')
@@ -167,6 +214,8 @@ export class PostsService {
         select: '_id firstName lastName username avatar role',
       })
       .exec();
+    
+    return this.addCountsToPosts(posts);
   }
 
   async findByContentType(
@@ -180,7 +229,7 @@ export class PostsService {
       $ne: null,
       $regex: new RegExp('\\S'), // at least one non-whitespace character
     };
-    return this.postModel
+    const posts = await this.postModel
       .find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
@@ -191,6 +240,8 @@ export class PostsService {
         select: '_id firstName lastName username avatar role',
       })
       .exec();
+    
+    return this.addCountsToPosts(posts);
   }
 
   async addOrUpdateReaction(
@@ -246,7 +297,8 @@ export class PostsService {
       select: '_id firstName lastName username avatar role',
     });
 
-    return { post, action };
+    const postWithCounts = await this.addCountsToPost(post);
+    return { post: postWithCounts, action };
   }
 
   // Remove getAllTags and add trending tags
@@ -364,6 +416,12 @@ export class PostsService {
         // Attach comments to the post object
         const postWithComments = post.toObject() as any;
         postWithComments.comments = filteredComments;
+        
+        // Add counts to the post
+        const counts = await this.calculatePostCounts((post as any)._id.toString());
+        postWithComments.commentsCount = counts.commentsCount;
+        postWithComments.repliesCount = counts.repliesCount;
+        postWithComments.aiSuggestionsCount = counts.aiSuggestionsCount;
         
         return postWithComments;
       })
