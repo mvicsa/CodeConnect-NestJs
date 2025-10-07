@@ -617,5 +617,25 @@ export class ChatService {
     return { deleted: false };
   }
 
+  async checkOlderMessagesExist(roomId: string, beforeMessageId: string): Promise<boolean> {
+    try {
+      const query = {
+        chatRoom: new Types.ObjectId(roomId),
+        _id: { $lt: new Types.ObjectId(beforeMessageId) }
+      };
+      
+      const olderMessage = await this.messageModel
+        .findOne(query)
+        .select('_id')
+        .lean()
+        .exec();
+      
+      return !!olderMessage;
+    } catch (error) {
+      console.error('[SERVICE] Error checking older messages:', error);
+      return false;
+    }
+  }
+
   // Chat business logic will be implemented here
 }
