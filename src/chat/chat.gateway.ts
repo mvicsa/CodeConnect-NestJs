@@ -514,13 +514,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data.limit || 50,
         data.before,
       );
-      console.log('[GATEWAY] Fetched messages count:', messages.length);
+
+      // التحقق من وجود رسائل أقدم بشكل أكثر دقة
+      let hasMore = false;
+      if (messages.length > 0) {
+        const oldestMessageId = messages[messages.length - 1]._id.toString();
+        
+        // استعلام سريع للتحقق من وجود رسائل أقدم
+        const olderMessageExists = await this.chatService.checkOlderMessagesExist(
+          data.roomId, 
+          oldestMessageId
+        );
+        
+        hasMore = olderMessageExists;
+      }
+
+      console.log('[GATEWAY] Fetched messages:', messages.length, 'Has more:', hasMore);
 
       // Send messages only to the requesting client
       client.emit('chat:messages', {
         roomId: data.roomId,
         messages,
-        hasMore: messages.length === (data.limit || 50),
+        hasMore,
       });
     } catch (error) {
       console.error('[GATEWAY] Error fetching messages:', error);
