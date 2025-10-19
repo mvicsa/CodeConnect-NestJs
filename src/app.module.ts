@@ -16,6 +16,10 @@ import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { SearchModule } from './search/search.module';
 import { SparksModule } from './sparks/sparks.module';
 import { BlockModule } from './block/block.module';
+import { PaymentsModule } from './payments/payments.module';
+import { AdminModule } from './admin/admin.module';
+import { User, UserSchema } from './users/shemas/user.schema';
+import { ScheduleModule } from '@nestjs/schedule'; // Import ScheduleModule
 
 @Module({
   imports: [
@@ -27,6 +31,8 @@ import { BlockModule } from './block/block.module';
         uri: configService.get<string>('MONGO_URI'),
       }),
     }),
+    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]), // Add User schema for global access if needed
+    ScheduleModule.forRoot(), // Add ScheduleModule.forRoot()
     AuthModule,
     UsersModule,
     PostsModule,
@@ -39,7 +45,9 @@ import { BlockModule } from './block/block.module';
     RabbitMQModule,
     SearchModule,
     SparksModule,
-    BlockModule
+    BlockModule,
+    PaymentsModule,
+    AdminModule, // Add AdminModule
   ],
   controllers: [AppController],
   providers: [AppService],

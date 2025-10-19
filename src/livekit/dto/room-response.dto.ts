@@ -31,6 +31,26 @@ export class CreatedByDto {
   username: string;
 }
 
+export class RecentPurchaserDto {
+  @ApiProperty({ description: 'User ID' })
+  userId: string;
+
+  @ApiProperty({ description: 'Username' })
+  username: string;
+
+  @ApiProperty({ description: 'First name' })
+  firstName: string;
+
+  @ApiProperty({ description: 'Last name' })
+  lastName: string;
+
+  @ApiProperty({ description: 'User avatar URL' })
+  avatar: string;
+
+  @ApiProperty({ description: 'Purchase date' })
+  purchasedAt: Date;
+}
+
 export class RoomResponseDto {
   @ApiProperty({ description: 'Room ID' })
   _id: string;
@@ -103,4 +123,93 @@ export class RoomResponseDto {
     required: false
   })
   peakParticipants?: number;
+
+  @ApiProperty({ 
+    description: 'Number of completed purchases for this room',
+    example: 5,
+    required: false
+  })
+  completedPurchasesCount?: number;
+
+  @ApiProperty({ 
+    description: 'Recent purchasers (last 3) for public view',
+    type: [RecentPurchaserDto],
+    required: false
+  })
+  recentPurchasers?: RecentPurchaserDto[];
+}
+
+export class PurchaserDto {
+  @ApiProperty({ description: 'Purchase ID' })
+  purchaseId: string;
+
+  @ApiProperty({ description: 'User ID' })
+  userId: string;
+
+  @ApiProperty({ description: 'Username' })
+  username: string;
+
+  @ApiProperty({ description: 'First name' })
+  firstName: string;
+
+  @ApiProperty({ description: 'Last name' })
+  lastName: string;
+
+  @ApiProperty({ description: 'User avatar URL' })
+  avatar: string;
+
+  @ApiProperty({ description: 'User email' })
+  email: string;
+
+  @ApiProperty({ description: 'Amount paid' })
+  amountPaid: number;
+
+  @ApiProperty({ description: 'Currency used' })
+  currency: string;
+
+  @ApiProperty({ description: 'Purchase date' })
+  purchasedAt: Date;
+
+  @ApiProperty({ description: 'Purchase status' })
+  status: string;
+}
+
+export class PaginationDto {
+  @ApiProperty({ description: 'Current page number' })
+  page: number;
+
+  @ApiProperty({ description: 'Number of items per page' })
+  limit: number;
+
+  @ApiProperty({ description: 'Total number of items' })
+  total: number;
+
+  @ApiProperty({ description: 'Total number of pages' })
+  totalPages: number;
+
+  @ApiProperty({ description: 'Has next page' })
+  hasNext: boolean;
+
+  @ApiProperty({ description: 'Has previous page' })
+  hasPrev: boolean;
+}
+
+export class RoomPurchasersResponseDto {
+  @ApiProperty({ description: 'Room ID' })
+  roomId: string;
+
+  @ApiProperty({ description: 'Room name' })
+  roomName: string;
+
+  @ApiProperty({ description: 'Total number of purchasers' })
+  totalPurchasers: number;
+
+  @ApiProperty({ description: 'Total revenue from all purchases' })
+  totalRevenue: number;
+
+  @ApiProperty({ description: 'List of purchasers for current page', type: [PurchaserDto] })
+  purchasers: PurchaserDto[];
+
+  @ApiProperty({ description: 'Pagination information', type: PaginationDto })
+  pagination: PaginationDto;
 } 

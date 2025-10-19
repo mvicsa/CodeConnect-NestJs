@@ -40,7 +40,10 @@ export class NotificationService {
 
   async create(dto: CreateNotificationDto) {
     dto.toUserId = extractObjectId(dto.toUserId);
-    dto.fromUserId = extractObjectId(dto.fromUserId);
+    // لا نحول fromUserId إذا كان null
+    if (dto.fromUserId) {
+      dto.fromUserId = extractObjectId(dto.fromUserId);
+    }
     // Always store postId as a string/ObjectId, never as a full object
     if (dto.data && dto.data.postId) {
       dto.data.postId = extractObjectId(dto.data.postId);
@@ -73,7 +76,11 @@ export class NotificationService {
         // Populate and return as in the new notification case
         const populatedNotification = await this.notificationModel.findById(existing._id)
           .populate('toUserId', 'username firstName lastName avatar')
-          .populate('fromUserId', 'username firstName lastName avatar')
+          .populate({
+            path: 'fromUserId',
+            model: 'User',
+            select: 'username firstName lastName avatar'
+          })
           .populate({
             path: 'data.postId',
             model: 'Post',
@@ -143,7 +150,11 @@ export class NotificationService {
         // Populate and return as in the new notification case
         const populatedNotification = await this.notificationModel.findById(existing._id)
           .populate('toUserId', 'username firstName lastName avatar')
-          .populate('fromUserId', 'username firstName lastName avatar')
+          .populate({
+            path: 'fromUserId',
+            model: 'User',
+            select: 'username firstName lastName avatar'
+          })
           .populate({
             path: 'data.postId',
             model: 'Post',
@@ -208,7 +219,11 @@ export class NotificationService {
     // جلب الإشعار المحدث مع populate
     const populatedNotification = await this.notificationModel.findById(saved._id)
       .populate('toUserId', 'username firstName lastName avatar')
-      .populate('fromUserId', 'username firstName lastName avatar')
+      .populate({
+        path: 'fromUserId',
+        model: 'User',
+        select: 'username firstName lastName avatar'
+      })
       .populate({
         path: 'data.postId',
         model: 'Post',
@@ -272,7 +287,11 @@ export class NotificationService {
   findByUser(toUserId: string) {
     return this.notificationModel.find({ toUserId })
       .populate('toUserId', 'username firstName lastName avatar')
-      .populate('fromUserId', 'username firstName lastName avatar')
+      .populate({
+        path: 'fromUserId',
+        model: 'User',
+        select: 'username firstName lastName avatar'
+      })
       .populate({
         path: 'data.postId',
         model: 'Post',
@@ -338,7 +357,11 @@ export class NotificationService {
       { isRead: true },
       { new: true },
     ).populate('toUserId', 'username firstName lastName avatar')
-     .populate('fromUserId', 'username firstName lastName avatar')
+     .populate({
+       path: 'fromUserId',
+       model: 'User',
+       select: 'username firstName lastName avatar'
+     })
      .populate({
        path: 'data.postId',
        model: 'Post',
@@ -399,14 +422,30 @@ export class NotificationService {
 
   async addNotifications(notifications: CreateNotificationDto[]) {
     try {
-      const created = await this.notificationModel.insertMany(notifications);
+      // تنظيف البيانات قبل الإدراج
+      const cleanedNotifications = notifications.map(notification => {
+        const cleaned = { ...notification };
+        cleaned.toUserId = extractObjectId(cleaned.toUserId);
+        // لا نحول fromUserId إذا كان null
+        if (cleaned.fromUserId) {
+          cleaned.fromUserId = extractObjectId(cleaned.fromUserId);
+        }
+        return cleaned;
+      });
+      
+      const created = await this.notificationModel.insertMany(cleanedNotifications);
       
       // جلب الإشعارات المحدثة مع populate
       const populatedNotifications = await this.notificationModel.find({
         _id: { $in: created.map(n => n._id) }
       })
       .populate('toUserId', 'username firstName lastName avatar')
-      .populate('fromUserId', 'username firstName lastName avatar')
+      .populate({
+        path: 'fromUserId',
+        model: 'User',
+        select: 'username firstName lastName avatar',
+        match: { _id: { $exists: true, $ne: null } } // فقط إذا كان fromUserId موجود وليس null
+      })
       .populate({
         path: 'data.postId',
         model: 'Post',

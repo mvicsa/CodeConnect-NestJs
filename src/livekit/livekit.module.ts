@@ -10,16 +10,20 @@ import { LivekitRoom, LivekitRoomSchema } from './room.schema';
 import { User, UserSchema } from '../users/shemas/user.schema';
 import { Rating, RatingSchema } from './schemas/rating.schema';
 import { NotificationModule } from '../notification/notification.module';
+import { MeetingPurchase, MeetingPurchaseSchema } from './schemas/meeting-purchase.schema';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
     ConfigModule,
     NotificationModule,
+    PaymentsModule,
     MongooseModule.forFeature([
       { name: LivekitSession.name, schema: LivekitSessionSchema },
       { name: LivekitRoom.name, schema: LivekitRoomSchema },
       { name: User.name, schema: UserSchema },
       { name: Rating.name, schema: RatingSchema },
+      { name: MeetingPurchase.name, schema: MeetingPurchaseSchema },
     ]),
   ],
   controllers: [LivekitController],

@@ -99,6 +99,10 @@ export class User {
   @ApiProperty({ required: false, nullable: true })
   @Prop({ type: String, default: null })
   country?: string;
+
+  @ApiProperty({ required: false, nullable: true, description: 'Stripe Connect Account ID for creators' })
+  @Prop({ type: String, default: null })
+  stripeConnectAccountId?: string;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

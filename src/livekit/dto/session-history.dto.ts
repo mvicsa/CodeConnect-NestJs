@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsNumber, Min, Max } from 'class-validator';
+import { IsOptional, IsNumber, Min, Max, IsString, IsIn } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
 export class SessionHistoryQueryDto {
@@ -34,6 +34,51 @@ export class SessionHistoryQueryDto {
   @Min(1)
   @Max(100)
   limit?: number;
+
+  @ApiProperty({ 
+    description: 'Filter by session status', 
+    enum: ['active', 'ended', 'cancelled', 'all'], 
+    example: 'all',
+    required: false,
+    default: 'all' 
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['active', 'ended', 'cancelled', 'all'])
+  status?: 'active' | 'ended' | 'cancelled' | 'all' = 'all';
+
+  @ApiProperty({ 
+    description: 'Filter by room type', 
+    enum: ['public', 'private', 'all'], 
+    example: 'all',
+    required: false,
+    default: 'all' 
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['public', 'private', 'all'])
+  type?: 'public' | 'private' | 'all' = 'all';
+
+  @ApiProperty({ 
+    description: 'Filter by payment status', 
+    enum: ['paid', 'free', 'all'], 
+    example: 'all',
+    required: false,
+    default: 'all' 
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['paid', 'free', 'all'])
+  paymentStatus?: 'paid' | 'free' | 'all' = 'all';
+
+  @ApiProperty({ 
+    description: 'Search in room name and description', 
+    example: 'coding session',
+    required: false 
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
 
 export class PaginationDto {
@@ -96,14 +141,73 @@ export class SessionHistoryItemDto {
   @ApiProperty({ description: 'Last time user joined this room' })
   lastJoined: Date | null;
 
-  @ApiProperty({ description: 'Room status (Active/Ended/Error)' })
+  @ApiProperty({ description: 'Room status (Active/Ended/Cancelled/Error)' })
   status: string;
+
+  @ApiProperty({ description: 'Is room paid', required: false })
+  isPaid?: boolean;
+
+  @ApiProperty({ description: 'Room price', required: false })
+  price?: number;
+
+  @ApiProperty({ description: 'Room currency', required: false })
+  currency?: string;
+
+  @ApiProperty({ description: 'Room cancellation date', required: false })
+  cancelledAt?: Date | null;
+
+  @ApiProperty({ description: 'Room cancellation reason', required: false })
+  cancellationReason?: string | null;
 
   @ApiProperty({ description: 'Additional note (optional)' })
   note?: string;
 
+  @ApiProperty({ description: 'Average rating of the session', required: false })
+  averageRating?: number;
+
+  @ApiProperty({ description: 'Total number of ratings for this session', required: false })
+  ratingCount?: number;
+
+  @ApiProperty({ description: 'Current user rating for this session', required: false })
+  userRating?: number;
+
+  @ApiProperty({ description: 'Whether current user has rated this session', required: false })
+  isUserRated?: boolean;
+
   @ApiProperty({ description: 'Error message if processing failed (optional)' })
   error?: string;
+}
+
+export class SessionHistoryFiltersDto {
+  @ApiProperty({ description: 'Available status filters', example: ['active', 'ended', 'cancelled', 'all'] })
+  availableStatuses: string[];
+
+  @ApiProperty({ description: 'Available type filters', example: ['public', 'private', 'all'] })
+  availableTypes: string[];
+
+  @ApiProperty({ description: 'Available payment status filters', example: ['paid', 'free', 'all'] })
+  availablePaymentStatuses: string[];
+
+  @ApiProperty({ description: 'Total active sessions' })
+  totalActiveSessions: number;
+
+  @ApiProperty({ description: 'Total ended sessions' })
+  totalEndedSessions: number;
+
+  @ApiProperty({ description: 'Total cancelled sessions' })
+  totalCancelledSessions: number;
+
+  @ApiProperty({ description: 'Total public sessions' })
+  totalPublicSessions: number;
+
+  @ApiProperty({ description: 'Total private sessions' })
+  totalPrivateSessions: number;
+
+  @ApiProperty({ description: 'Total paid sessions' })
+  totalPaidSessions: number;
+
+  @ApiProperty({ description: 'Total free sessions' })
+  totalFreeSessions: number;
 }
 
 export class SessionHistoryResponseDto {
@@ -119,10 +223,16 @@ export class SessionHistoryResponseDto {
   @ApiProperty({ description: 'Number of ended rooms' })
   endedRooms: number;
 
+  @ApiProperty({ description: 'Number of cancelled rooms' })
+  cancelledRooms: number;
+
   @ApiProperty({ description: 'Response message' })
   message: string;
 
   @ApiProperty({ description: 'Pagination metadata', type: PaginationDto })
   pagination: PaginationDto;
+
+  @ApiProperty({ description: 'Available filters', type: SessionHistoryFiltersDto })
+  filters: SessionHistoryFiltersDto;
 }
 

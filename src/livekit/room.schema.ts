@@ -24,8 +24,20 @@ export class LivekitRoom {
   @Prop({ required: false })
   isPrivate: boolean;
 
-  @ApiProperty({ required: false })
-  @Prop({ default: 10 })
+  @ApiProperty({ required: false, default: false })
+  @Prop({ default: false })
+  isPaid: boolean;
+
+  @ApiProperty({ required: false, default: 0 })
+  @Prop({ default: 0 })
+  price: number;
+
+  @ApiProperty({ required: false, default: 'USD' })
+  @Prop({ default: 'USD' })
+  currency: string;
+
+  @ApiProperty({ required: false, default: Number.MAX_SAFE_INTEGER })
+  @Prop({ default: Number.MAX_SAFE_INTEGER })
   maxParticipants: number;
 
   @ApiProperty({ required: false })
@@ -59,6 +71,14 @@ export class LivekitRoom {
   @ApiProperty({ required: false, type: String })
   @Prop()
   endedDate?: Date;
+
+  @ApiProperty({ required: false, type: String })
+  @Prop()
+  cancelledAt?: Date;
+
+  @ApiProperty({ required: false, type: String })
+  @Prop()
+  cancellationReason?: string;
 
   @ApiProperty({ 
     required: false, 
@@ -95,3 +115,16 @@ export type PopulatedLivekitRoomDocument = LivekitRoom &
     invitedUsers: Array<{ _id: string; username: string; email: string }>;
   };
 export const LivekitRoomSchema = SchemaFactory.createForClass(LivekitRoom);
+
+// إضافة indexes لتحسين الأداء
+LivekitRoomSchema.index({ isPaid: 1 }); // فلترة الجلسات المدفوعة
+LivekitRoomSchema.index({ isActive: 1 }); // فلترة الجلسات النشطة
+LivekitRoomSchema.index({ scheduledStartTime: 1 }); // فلترة الجلسات المجدولة
+LivekitRoomSchema.index({ createdBy: 1 }); // جلب جلسات المستخدم
+LivekitRoomSchema.index({ isPrivate: 1 }); // فلترة الجلسات العامة/الخاصة
+LivekitRoomSchema.index({ price: 1 }); // ترتيب حسب السعر
+LivekitRoomSchema.index({ currency: 1 }); // فلترة حسب العملة
+LivekitRoomSchema.index({ createdAt: -1 }); // ترتيب افتراضي بالتاريخ
+LivekitRoomSchema.index({ name: 'text', description: 'text' }); // بحث نصي
+LivekitRoomSchema.index({ isPaid: 1, isActive: 1 }); // فلترة متعددة شائعة
+LivekitRoomSchema.index({ isPaid: 1, price: 1 }); // فلترة المدفوعة مع السعر

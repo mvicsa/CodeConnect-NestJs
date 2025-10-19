@@ -23,8 +23,8 @@ export class BlockFilterInterceptor implements NestInterceptor {
           for (const item of data) {
             if (item._id || item.id) {
               const userId = item._id || item.id;
-              const isBlocked = await this.blockService.isBlocked(user.id, userId);
-              const isBlockedBy = await this.blockService.isBlockedBy(user.id, userId);
+              const isBlocked = await this.blockService.isBlocked(user.sub, userId); // Changed user.id to user.sub
+              const isBlockedBy = await this.blockService.isBlockedBy(user.sub, userId); // Changed user.id to user.sub
               
               if (!isBlocked && !isBlockedBy) {
                 filteredData.push(item);
@@ -39,8 +39,8 @@ export class BlockFilterInterceptor implements NestInterceptor {
         // If data is a single user object, check if blocked
         if (data && (data._id || data.id)) {
           const userId = data._id || data.id;
-          const isBlocked = await this.blockService.isBlocked(user.id, userId);
-          const isBlockedBy = await this.blockService.isBlockedBy(user.id, userId);
+          const isBlocked = await this.blockService.isBlocked(user.sub, userId); // Changed user.id to user.sub
+          const isBlockedBy = await this.blockService.isBlockedBy(user.sub, userId); // Changed user.id to user.sub
           
           if (isBlocked || isBlockedBy) {
             return null; // Return null for blocked users

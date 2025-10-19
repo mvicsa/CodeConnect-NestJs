@@ -114,7 +114,11 @@ export class NotificationController {
     const updatedNotification = await this.notificationModel
       .findByIdAndUpdate(notificationId, { isRead: true }, { new: true })
       .populate('toUserId', 'username firstName lastName avatar')
-      .populate('fromUserId', 'username firstName lastName avatar')
+      .populate({
+        path: 'fromUserId',
+        model: 'User',
+        select: 'username firstName lastName avatar'
+      })
       .populate({
         path: 'data.postId',
         model: 'Post',
@@ -202,7 +206,11 @@ export class NotificationController {
     const notification = await this.notificationModel
       .findById(id)
       .populate('toUserId', 'username firstName lastName avatar')
-      .populate('fromUserId', 'username firstName lastName avatar')
+      .populate({
+        path: 'fromUserId',
+        model: 'User',
+        select: 'username firstName lastName avatar'
+      })
       .populate({
         path: 'data.postId',
         model: 'Post',
@@ -339,7 +347,11 @@ export class NotificationController {
     const updatedNotifications = await this.notificationModel
       .find({ toUserId: userId })
       .populate('toUserId', 'username firstName lastName avatar')
-      .populate('fromUserId', 'username firstName lastName avatar')
+      .populate({
+        path: 'fromUserId',
+        model: 'User',
+        select: 'username firstName lastName avatar'
+      })
       .populate({
         path: 'data.postId',
         model: 'Post',
