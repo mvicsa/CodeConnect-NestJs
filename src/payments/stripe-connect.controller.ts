@@ -33,7 +33,7 @@ export class StripeConnectController {
   ) {
     await this.stripeConnectService.handleOnboardingReturn(state, scope, code);
     // Redirect to a frontend page indicating success or failure
-    res.redirect('http://localhost:3000/settings?stripe_onboard=success');
+    res.redirect(`${process.env.FRONTEND_URL}/settings?stripe_onboard=success`);
   }
 
   @Get('account-status')
