@@ -152,8 +152,8 @@ export class StripeConnectService {
         response.message = 'Please complete your Stripe account setup to enable payments and payouts.';
         const accountLink = await this.stripe.accountLinks.create({
           account: user.stripeConnectAccountId,
-          refresh_url: 'http://localhost:3000/settings?stripe_onboard=refresh',
-          return_url: 'http://localhost:3000/settings?stripe_onboard=success', // Consider a more specific return URL for settings update
+          refresh_url: `${this.configService.get<string>('FRONTEND_URL')}/settings?stripe_onboard=refresh`,
+          return_url: `${this.configService.get<string>('FRONTEND_URL')}/settings?stripe_onboard=success`, // Consider a more specific return URL for settings update
           type: 'account_update',
         });
         response.settingsLink = accountLink.url;
@@ -162,8 +162,8 @@ export class StripeConnectService {
         // Optionally, provide a link to the Stripe dashboard for the user to check
         const accountLink = await this.stripe.accountLinks.create({
           account: user.stripeConnectAccountId,
-          refresh_url: 'http://localhost:3000/settings?stripe_onboard=refresh',
-          return_url: 'http://localhost:3000/settings?stripe_onboard=success', // Consider a more specific return URL for settings update
+          refresh_url: `${this.configService.get<string>('FRONTEND_URL')}/settings?stripe_onboard=refresh`,
+          return_url: `${this.configService.get<string>('FRONTEND_URL')}/settings?stripe_onboard=success`, // Consider a more specific return URL for settings update
           type: 'account_update',
         });
         response.settingsLink = accountLink.url;
