@@ -58,8 +58,8 @@ export class StripeConnectService {
     // Create an account link for onboarding
     const accountLink = await this.stripe.accountLinks.create({
       account: accountId,
-      refresh_url: 'http://localhost:3000/settings?stripe_onboard=refresh',
-      return_url: 'http://localhost:5000/stripe-connect/onboard-return?state=' + userId, // state will contain userId
+      refresh_url: `${this.configService.get<string>('FRONTEND_URL')}/settings?stripe_onboard=refresh`,
+      return_url: `${this.configService.get<string>('BACKEND_URL')}/stripe-connect/onboard-return?state=` + userId, // state will contain userId
       type: 'account_onboarding',
     });
 
