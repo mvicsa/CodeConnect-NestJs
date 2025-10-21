@@ -51,15 +51,17 @@ export class NotificationController {
   @ApiQuery({ name: 'limit', type: Number, required: false })
   @ApiQuery({ name: 'skip', type: Number, required: false })
   @ApiQuery({ name: 'isRead', type: String, required: false })
+  @ApiQuery({ name: 'search', type: String, required: false })
   @ApiResponse({ status: 200, description: 'List of user notifications.' })
   @ApiBadRequestResponse({
     description: 'Invalid user ID or query parameters.',
   })
   async getUserNotifications(
     @Param('userId') userId: string,
-    @Query('limit') limit = 20,
-    @Query('skip') skip = 0,
-    @Query('isRead') isRead?: string, // Change to string
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+    @Query('search') search?: string,
+    @Query('isRead') isRead?: string,
   ) {
     if (!userId || typeof userId !== 'string' || !isValidObjectId(userId)) {
       throw new BadRequestException('Invalid user ID');
@@ -68,14 +70,16 @@ export class NotificationController {
     if (isRead !== undefined) {
       query.isRead = isRead === 'true'; // Convert string to boolean
     }
-    const notifications = await this.notificationService.findByUser(userId);
+    const { notifications, totalPages, currentPage, totalUnreadCount, totalNotificationsCount, totalReadCount } = await this.notificationService.findByUser(userId, Number(page), Number(limit), search, isRead);
 
-    // تطبيق pagination يدوياً
-    const startIndex = Number(skip);
-    const endIndex = startIndex + Number(limit);
-    const paginatedNotifications = notifications.slice(startIndex, endIndex);
-
-    return paginatedNotifications;
+    return {
+      notifications,
+      totalPages,
+      currentPage,
+      totalUnreadCount,
+      totalNotificationsCount,
+      totalReadCount,
+    };
   }
   //  6 user status, 7 notification status
   @Patch(':id/read')

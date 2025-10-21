@@ -1971,10 +1971,24 @@ export class PaymentService {
         }
       },
       {
+        $lookup: {
+          from: 'earningsescrows',
+          localField: '_id',
+          foreignField: 'purchaseId',
+          as: 'escrowInfo',
+          pipeline: [
+            { $match: { type: 'creator', creatorId: new Types.ObjectId(userId) } },
+            { $project: { amount: 1 } }
+          ]
+        }
+      },
+      { $unwind: { path: '$escrowInfo', preserveNullAndEmptyArrays: true } },
+      {
         $project: {
           type: { $literal: 'refund' },
           description: { $literal: 'Session refund' },
           originalAmount: '$amountPaid',
+          creatorRecoveryAmount: '$escrowInfo.amount', // المبلغ المسترد من creator من escrow
           currency: '$currencyUsed',
           date: '$purchaseDate',
           releaseDate: '$purchaseDate',
@@ -1991,7 +2005,7 @@ export class PaymentService {
           amount: {
             $cond: {
               if: '$isCreator',
-              then: { $multiply: ['$originalAmount', -1] }, // سالب للـ creator
+              then: { $multiply: ['$creatorRecoveryAmount', -1] }, // سالب للمبلغ المسترد من الـ creator
               else: '$originalAmount' // إيجابي للمشتري
             }
           },
