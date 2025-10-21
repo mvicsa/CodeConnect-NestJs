@@ -180,11 +180,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Edit the message
       const updatedMessage = await this.chatService.editMessage(userId, data.messageId, data.updates);
       
+      // حساب lastActivity بعد التعديل
+      const lastActivity = await this.chatService.calculateLastActivity(data.roomId);
+      
       // Emit the updated message to all users in the room
-      this.server.to(data.roomId).emit('chat:message_edited', updatedMessage);
+      this.server.to(data.roomId).emit('chat:message_edited', {
+        ...updatedMessage,
+        lastActivity  // ✅ إضافة lastActivity
+      });
       
       // Also emit to sender for confirmation
-      client.emit('chat:message_edited', updatedMessage);
+      client.emit('chat:message_edited', {
+        ...updatedMessage,
+        lastActivity  // ✅ إضافة lastActivity
+      });
     } catch (error) {
       console.error('[GATEWAY] Error editing message:', error);
       client.emit('chat:error', { message: 'Failed to edit message' });
@@ -270,17 +279,22 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
     try {
       await this.chatService.deleteMessage(userId, data.messageId, data.forAll);
+      
+      // حساب lastActivity بعد الحذف
+      const lastActivity = await this.chatService.calculateLastActivity(data.roomId);
+      
       console.log(
         '[GATEWAY] Message deleted successfully, broadcasting to room:',
         data.roomId,
       );
 
-      // Broadcast to all clients in the room, including sender
+      // إضافة lastActivity إلى الـ broadcast
       this.server.to(data.roomId).emit('chat:delete_message', {
         messageId: data.messageId,
         roomId: data.roomId,
         forAll: data.forAll,
         userId,
+        lastActivity,  // آخر نشاط محدث
       });
 
       console.log('[GATEWAY] Delete event broadcasted successfully');

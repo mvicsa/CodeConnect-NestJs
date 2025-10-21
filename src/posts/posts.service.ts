@@ -34,22 +34,42 @@ export class PostsService {
     repliesCount: number;
     aiSuggestionsCount: number;
   }> {
-    const [commentsCount, repliesCount, aiSuggestionsCount] = await Promise.all([
-      // Count top-level comments (parentCommentId is null)
+    const comments = await this.commentModel.find({
+      postId: new Types.ObjectId(postId)
+    });
+
+    const commentIds = comments.map(comment => comment._id);
+
+    // ✅ حساب الاقتراحات من كلا المجموعتين
+    const [postSuggestionsCount, commentEvaluationsCount] = await Promise.all([
+      // اقتراحات على البوست نفسه
+      this.codeSuggestionModel.countDocuments({
+        postId: new Types.ObjectId(postId)
+      }),
+      // تقييمات على تعليقات البوست
+      this.aiCommentEvalModel.countDocuments({
+        postId: new Types.ObjectId(postId),
+        commentId: { $in: commentIds }
+      })
+    ]);
+
+    const aiSuggestionsCount = postSuggestionsCount + commentEvaluationsCount;
+
+    const [commentsCount, repliesCount] = await Promise.all([
       this.commentModel.countDocuments({
         postId: new Types.ObjectId(postId),
         parentCommentId: null,
       }),
-      // Count replies (parentCommentId is not null)
       this.commentModel.countDocuments({
         postId: new Types.ObjectId(postId),
         parentCommentId: { $ne: null },
       }),
-      // Count AI suggestions
-      this.codeSuggestionModel.countDocuments({
-        postId: new Types.ObjectId(postId),
-      }),
     ]);
+
+    // ✅ تحديث hasAiSuggestions للبوست
+    await this.postModel.findByIdAndUpdate(postId, {
+      hasAiSuggestions: aiSuggestionsCount > 0
+    });
 
     return { commentsCount, repliesCount, aiSuggestionsCount };
   }

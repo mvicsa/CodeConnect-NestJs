@@ -192,7 +192,7 @@ export class UsersController {
     @Query('limit') limit?: string,
     @Query('skip') skip?: string,
   ) {
-    const userId = req.user?.sub;
+    const userId = req.user?.sub; // Changed from req.user?._id to req.user?.sub
     return this.usersService.suggestUsers(
       userId,
       limit ? Number(limit) : 5,

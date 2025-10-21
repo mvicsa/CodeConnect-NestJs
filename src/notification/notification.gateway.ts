@@ -47,7 +47,7 @@ export class NotificationGateway {
       // console.log(`User ${toUserId} already in room ${room}`);
     }
     const notifications = await this.notificationService.findByUser(toUserId);
-    notifications.forEach((notification) =>
+    notifications.notifications.forEach((notification) =>
       client.emit('notification', notification),
     );
   }

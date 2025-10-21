@@ -237,7 +237,6 @@ export class ChatService {
    * Returns the most recent activity (message or reaction)
    */
   async calculateLastActivity(roomId: string) {
-    // Convert roomId to ObjectId if needed
     const roomObjectId = new Types.ObjectId(roomId);
     
     // Get the latest message in the room
@@ -248,30 +247,13 @@ export class ChatService {
       .lean()
       .exec();
 
-    if (!latestMessage) {
-      
-      // If no messages, get room creation time as fallback
-      const room = await this.chatRoomModel.findById(roomObjectId).lean().exec();
-      if (room) {
-        return {
-          type: 'message' as const,
-          time: (room as any).createdAt || new Date(),
-          messageId: null,
-          message: null,
-          isRoomCreation: true
-        };
-      }
-      
-      return null;
-    }
-
     // Find the latest reaction across all messages in the room
     const messagesWithReactions = await this.messageModel
       .find({ 
         chatRoom: roomObjectId,
         'userReactions.0': { $exists: true } // Only messages that have reactions
       })
-      .sort({ createdAt: -1 })
+      .sort({ 'userReactions.createdAt': -1 }) // ترتيب حسب آخر تفاعل
       .lean()
       .exec();
 
@@ -283,6 +265,7 @@ export class ChatService {
       if (message.userReactions && Array.isArray(message.userReactions)) {
         for (const userReaction of message.userReactions) {
           const reactionTime = new Date((userReaction as any).createdAt);
+          
           if (!latestReactionTime || reactionTime > latestReactionTime) {
             latestReactionTime = reactionTime;
             latestReaction = {
@@ -297,30 +280,62 @@ export class ChatService {
       }
     }
 
-    // Compare latest message time with latest reaction time
-    const messageTime = new Date((latestMessage as any).createdAt);
-    
-    if (latestReaction && latestReactionTime && latestReactionTime > messageTime) {
-      // Latest activity is a reaction - populate the userId manually
-      const User = this.messageModel.db.model('User');
-      const populatedUser = await User.findById(latestReaction.userId)
-        .select('username firstName lastName avatar')
-        .lean()
-        .exec();
-      
-      return {
-        ...latestReaction,
-        userId: populatedUser
-      };
-    } else {
-      // Latest activity is a message
-      return {
-        type: 'message' as const,
-        time: messageTime,
+    // جمع كل الأنشطة
+    const activities = [
+      latestReaction ? { ...latestReaction } : null,
+      (latestMessage && (latestMessage as any).deleted) ? {
+        type: 'deletion',
+        time: (latestMessage as any).updatedAt || new Date(),
+        messageId: (latestMessage as any)._id,
+        displayText: 'Message deleted'
+      } : null,
+      latestMessage ? {
+        type: 'message',
+        time: new Date((latestMessage as any).createdAt),
         messageId: latestMessage._id,
         message: latestMessage
+      } : null
+    ].filter(Boolean);
+
+    // ترتيب الأنشطة حسب التوقيت
+    const sortedActivities = activities.sort((a, b) => 
+      new Date(b.time).getTime() - new Date(a.time).getTime()
+    );
+
+    // إرجاع أحدث نشاط
+    if (sortedActivities.length > 0) {
+      const topActivity = sortedActivities[0];
+      
+      // إذا كان Reaction، نحتاج استرجاع معلومات المستخدم
+      if (topActivity.type === 'reaction') {
+        const User = this.messageModel.db.model('User');
+        const populatedUser = await User.findById(topActivity.userId)
+          .select('username firstName lastName avatar')
+          .lean()
+          .exec();
+        
+        return {
+          ...topActivity,
+          userId: populatedUser
+        };
+      }
+      
+      return topActivity;
+    }
+
+    // إذا لم يوجد أي نشاط، نحاول إرجاع وقت إنشاء الغرفة
+    const room = await this.chatRoomModel.findById(roomObjectId).lean().exec();
+    if (room) {
+      return {
+        type: 'message' as const,
+        time: (room as any).createdAt || new Date(),
+        messageId: null,
+        message: null,
+        isRoomCreation: true
       };
     }
+    
+    return null;
   }
 
   async createGroup(

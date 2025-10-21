@@ -83,11 +83,26 @@ export enum NotificationType {
   COMMENT_REACTION = 'COMMENT_REACTION',
   FOLLOWED_USER = 'FOLLOWED_USER',
   MESSAGE_RECEIVED = 'MESSAGE_RECEIVED',
-  LOGIN = 'LOGIN', // New: for login notifications
-  USER_MENTIONED = 'USER_MENTIONED', // New: when a user is mentioned,
+  LOGIN = 'LOGIN',
+  USER_MENTIONED = 'USER_MENTIONED',
   ROOM_CREATED = 'ROOM_CREATED',
-  RATING_RECEIVED = 'RATING_RECEIVED', // New: when a creator receives a rating
-  RATING_REQUESTED = 'RATING_REQUESTED', // New: when a session ends and participants are asked to rate
+  RATING_RECEIVED = 'RATING_RECEIVED',
+  
+  // إضافة أنواع الإشعارات الجديدة للجلسات والدفع
+  SESSION_PURCHASED = 'SESSION_PURCHASED',
+  SESSION_CANCELLED = 'SESSION_CANCELLED',
+  SESSION_TIME_CHANGED = 'SESSION_TIME_CHANGED',
+  SESSION_DETAILS_CHANGED = 'SESSION_DETAILS_CHANGED',
+  SESSION_MAX_PARTICIPANTS_REACHED = 'SESSION_MAX_PARTICIPANTS_REACHED',
+  SESSION_REFUNDED = 'SESSION_REFUNDED',
+  STRIPE_CONNECT_SUCCESS = 'STRIPE_CONNECT_SUCCESS',
+  STRIPE_CONNECT_FAILURE = 'STRIPE_CONNECT_FAILURE',
+  STRIPE_CONNECT_PENDING = 'STRIPE_CONNECT_PENDING',
+  SESSION_PURCHASE_FAILED = 'SESSION_PURCHASE_FAILED',
+  SESSION_PURCHASE_CANCELLED = 'SESSION_PURCHASE_CANCELLED',
+  GENERAL_NOTIFICATION = 'GENERAL_NOTIFICATION',
+  WITHDRAWAL_SUCCESS = 'WITHDRAWAL_SUCCESS',
+  WITHDRAWAL_FAILURE = 'WITHDRAWAL_FAILURE',
 }
 // // Add more as needed
 // POST_SHARED = 'POST_SHARED', // New: when a post is shared
@@ -144,7 +159,11 @@ NotificationSchema.statics.markAllAsUnread = function (toUserId: string) {
 NotificationSchema.statics.findByUser = function (toUserId: string) {
   return this.find({ toUserId })
     .populate('toUserId', 'username firstName lastName avatar')
-    .populate('fromUserId', 'username firstName lastName avatar')
+    .populate({
+      path: 'fromUserId',
+      model: 'User',
+      select: 'username firstName lastName avatar'
+    })
     .populate({
       path: 'data.postId',
       model: 'Post',

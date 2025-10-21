@@ -17,6 +17,8 @@ import { Model, Schema as MongooseSchema, Types } from 'mongoose';
 import { LivekitSession, LivekitSessionDocument } from './session.schema';
 import { LivekitRoom, LivekitRoomDocument } from './room.schema';
 import { User, UserDocument } from '../users/shemas/user.schema';
+import { Rating, RatingDocument } from './schemas/rating.schema';
+import { MeetingPurchase, MeetingPurchaseDocument } from './schemas/meeting-purchase.schema';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -35,9 +37,10 @@ import { NotificationService } from '../notification/notification.service';
 
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
-import { RoomResponseDto } from './dto/room-response.dto';
+import { RoomResponseDto, RoomPurchasersResponseDto } from './dto/room-response.dto';
 import { CreateRatingDto } from './dto/create-rating.dto';
-import { SessionHistoryResponseDto, SessionHistoryQueryDto } from './dto/session-history.dto';
+import { SessionHistoryResponseDto, SessionHistoryQueryDto, SessionHistoryFiltersDto } from './dto/session-history.dto';
+import { DiscoverSessionsQueryDto, DiscoverSessionsResponseDto } from './dto/discover-sessions.dto';
 import { ConfigService } from '@nestjs/config';
 import { HttpException, HttpStatus, UnauthorizedException } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -53,11 +56,54 @@ export class LivekitController {
     private readonly roomModel: Model<LivekitRoomDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(Rating.name)
+    private readonly ratingModel: Model<RatingDocument>,
+    @InjectModel(MeetingPurchase.name)
+    private readonly meetingPurchaseModel: Model<MeetingPurchaseDocument>,
     private readonly livekitService: LivekitService,
     private readonly ratingService: RatingService,
     private readonly notificationService: NotificationService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {  }
+
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Discover and filter sessions',
+    description: 'Get a paginated list of sessions with advanced filtering, sorting, and search capabilities.',
+  })
+  @ApiQuery({ type: DiscoverSessionsQueryDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Sessions discovered successfully',
+    type: DiscoverSessionsResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 400, description: 'Bad Request - Invalid query parameters' })
+  @UseGuards(JwtAuthGuard)
+  @Get('sessions/discover')
+  async discoverSessions(
+    @Query() query: DiscoverSessionsQueryDto,
+    @Req() req,
+  ): Promise<DiscoverSessionsResponseDto> {
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new HttpException(
+        'User ID not found in JWT payload',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    try {
+      return await this.livekitService.discoverSessions(query, userId);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        `Failed to discover sessions: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 
   private getLiveKitClient(): RoomServiceClient | null {
     const apiKey = process.env.LIVEKIT_API_KEY;
@@ -154,7 +200,7 @@ export class LivekitController {
       const userId = req.user?.sub;
       if (!userId) {
         throw new HttpException(
-          'User ID not found in JWT payload',
+          "User ID not found in JWT payload",
           HttpStatus.UNAUTHORIZED,
         );
       }
@@ -162,35 +208,103 @@ export class LivekitController {
         .findById(userId)
         .select('username firstName lastName email avatar');
       if (!user) {
-        throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
+        throw new HttpException("User not found", HttpStatus.UNAUTHORIZED);
       }
       // Find room by secret ID
       if (!secretId) {
-        throw new HttpException('secretId is required', HttpStatus.BAD_REQUEST);
+        throw new HttpException("secretId is required", HttpStatus.BAD_REQUEST);
       }
       let roomDocument;
       try {
         roomDocument =
-          await this.livekitService.findRoomBySecretIdInternal(secretId);
+          await this.livekitService.findRoomBySecretIdInternal(secretId, userId);
       } catch (err) {
         if (err instanceof HttpException) throw err;
         throw new HttpException(
-          'Room not found or inactive',
+          "Room not found or inactive",
           HttpStatus.NOT_FOUND,
         );
       }
 
-      // Check if user is invited
+      // Check if user is creator or invited
+      const isCreator = roomDocument.createdBy._id.toString() === userId.toString();
+      
+      console.log('🔍 Creator check:', {
+        roomId: roomDocument._id,
+        isPrivate: roomDocument.isPrivate,
+        creatorId: roomDocument.createdBy._id.toString(),
+        userId: userId.toString(),
+        isCreator: isCreator,
+        invitedUsers: roomDocument.invitedUsers.map(id => id.toString())
+      });
+      
       if (
         roomDocument.isPrivate &&
+        !isCreator &&
         !roomDocument.invitedUsers.some(
-          (user) => user._id.toString() === userId,
+          (invitedUserId: Types.ObjectId) => invitedUserId.toString() === userId, // Corrected: comparing ObjectId directly
         )
       ) {
+        console.log('❌ Access denied - not creator and not invited');
         throw new HttpException(
-          'You are not invited to this room',
+          "You are not invited to this room",
           HttpStatus.FORBIDDEN,
         );
+      }
+      
+      console.log('✅ Access granted - creator or invited');
+
+      // Check participant limit
+      console.log(`[getToken] User ${userId} (creator: ${isCreator}) attempting to join room ${roomDocument._id}. Max participants: ${roomDocument.maxParticipants}`);
+
+      if (!isCreator && roomDocument.maxParticipants > 0) {
+        const livekitClient = this.getLiveKitClient();
+        if (livekitClient) {
+          try {
+            const livekitRoomName = roomDocument.secretId; // Use secretId for LiveKit room identifier
+            const participants = await livekitClient.listParticipants(livekitRoomName);
+            const currentParticipants = participants?.length || 0;
+            console.log(`[getToken] LiveKit real-time participants for room ${livekitRoomName}: ${currentParticipants}`);
+
+            if (currentParticipants >= roomDocument.maxParticipants) {
+              console.warn(`[getToken] Room ${roomDocument._id} is full (LiveKit: ${currentParticipants}/${roomDocument.maxParticipants}). Denying access to non-creator.`);
+              throw new HttpException(
+                "Room has reached its maximum participant limit.",
+                HttpStatus.FORBIDDEN,
+              );
+            }
+            console.log(`[getToken] Room ${roomDocument._id} has space (LiveKit: ${currentParticipants}/${roomDocument.maxParticipants}). Allowing access.`);
+          } catch (livekitError) {
+            console.warn('[getToken] Could not fetch real-time participant count from LiveKit, falling back to database session data:', livekitError);
+            const session = await this.sessionModel.findOne({ roomId: roomDocument._id });
+            const currentParticipants = session ? session.participants.filter(p => p.isActive).length : 0;
+            console.log(`[getToken] Database session active participants for room ${roomDocument._id}: ${currentParticipants}`);
+
+            if (currentParticipants >= roomDocument.maxParticipants) {
+              console.warn(`[getToken] Room ${roomDocument._id} is full (DB: ${currentParticipants}/${roomDocument.maxParticipants}). Denying access to non-creator.`);
+              throw new HttpException(
+                "Room has reached its maximum participant limit.",
+                HttpStatus.FORBIDDEN,
+              );
+            }
+            console.log(`[getToken] Room ${roomDocument._id} has space (DB: ${currentParticipants}/${roomDocument.maxParticipants}). Allowing access.`);
+          }
+        } else {
+          // LiveKit client not configured, rely solely on database session data
+          console.warn('[getToken] LiveKit client not configured, relying solely on database session data for participant limit check.');
+          const session = await this.sessionModel.findOne({ roomId: roomDocument._id });
+          const currentParticipants = session ? session.participants.filter(p => p.isActive).length : 0;
+          console.log(`[getToken] Database session active participants for room ${roomDocument._id}: ${currentParticipants}`);
+
+          if (currentParticipants >= roomDocument.maxParticipants) {
+            console.warn(`[getToken] Room ${roomDocument._id} is full (DB: ${currentParticipants}/${roomDocument.maxParticipants}, LiveKit not configured). Denying access to non-creator.`);
+            throw new HttpException(
+              "Room has reached its maximum participant limit.",
+              HttpStatus.FORBIDDEN,
+            );
+          }
+          console.log(`[getToken] Room ${roomDocument._id} has space (DB: ${currentParticipants}/${roomDocument.maxParticipants}, LiveKit not configured). Allowing access.`);
+        }
       }
 
       // Check if room is scheduled and not yet accessible
@@ -219,12 +333,13 @@ export class LivekitController {
       }
 
       const roomName = roomDocument.name;
+      // Use secretId for private rooms, MongoDB ID for public rooms
       const livekitRoomName = roomDocument.secretId; // Use secretId for LiveKit room identifier
       const apiKey = process.env.LIVEKIT_API_KEY;
       const apiSecret = process.env.LIVEKIT_API_SECRET;
       if (!apiKey || !apiSecret) {
         throw new HttpException(
-          'LiveKit API key/secret not set in environment variables',
+          "LiveKit API key/secret not set in environment variables",
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
@@ -303,13 +418,13 @@ export class LivekitController {
         token = await at.toJwt();
       } catch (err) {
         throw new HttpException(
-          'Failed to generate LiveKit token',
+          "Failed to generate LiveKit token",
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
       if (typeof token !== 'string') {
         throw new HttpException(
-          'Failed to generate LiveKit token',
+          "Failed to generate LiveKit token",
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
@@ -317,7 +432,7 @@ export class LivekitController {
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new HttpException(
-        error.message || 'Internal server error',
+        error.message || "Internal server error",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -390,16 +505,73 @@ export class LivekitController {
         throw new HttpException('Room is not active', HttpStatus.NOT_FOUND);
       }
 
-      // Check if user is invited for private rooms
+      // Check if user is creator or invited for private rooms
+      const isCreator = roomDocument.createdBy._id.toString() === userId.toString();
+      
       if (roomDocument.isPrivate) {
         const isInvited = roomDocument.invitedUsers.some(
           (id) => id.toString() === userId
         );
-        if (!isInvited) {
+        if (!isCreator && !isInvited) {
           throw new HttpException(
             'You are not invited to this private room',
             HttpStatus.FORBIDDEN,
           );
+        }
+      }
+
+      // Check participant limit
+      console.log(`[getRoomToken] User ${userId} (creator: ${isCreator}) attempting to join room ${roomDocument._id}. Max participants: ${roomDocument.maxParticipants}`);
+
+      if (!isCreator && roomDocument.maxParticipants > 0) {
+        const livekitClient = this.getLiveKitClient();
+        if (livekitClient) {
+          try {
+            const livekitRoomName = roomDocument.isPrivate 
+              ? roomDocument.secretId 
+              : roomDocument._id.toString();
+            const participants = await livekitClient.listParticipants(livekitRoomName);
+            const currentParticipants = participants?.length || 0;
+            console.log(`[getRoomToken] LiveKit real-time participants for room ${livekitRoomName}: ${currentParticipants}`);
+
+            if (currentParticipants >= roomDocument.maxParticipants) {
+              console.warn(`[getRoomToken] Room ${roomDocument._id} is full (LiveKit: ${currentParticipants}/${roomDocument.maxParticipants}). Denying access to non-creator.`);
+              throw new HttpException(
+                "Room has reached its maximum participant limit.",
+                HttpStatus.FORBIDDEN,
+              );
+            }
+            console.log(`[getRoomToken] Room ${roomDocument._id} has space (LiveKit: ${currentParticipants}/${roomDocument.maxParticipants}). Allowing access.`);
+          } catch (livekitError) {
+            console.warn('[getRoomToken] Could not fetch real-time participant count from LiveKit, falling back to database session data:', livekitError);
+            const session = await this.sessionModel.findOne({ roomId: roomDocument._id });
+            const currentParticipants = session ? session.participants.filter(p => p.isActive).length : 0;
+            console.log(`[getRoomToken] Database session active participants for room ${roomDocument._id}: ${currentParticipants}`);
+
+            if (currentParticipants >= roomDocument.maxParticipants) {
+              console.warn(`[getRoomToken] Room ${roomDocument._id} is full (DB: ${currentParticipants}/${roomDocument.maxParticipants}). Denying access to non-creator.`);
+              throw new HttpException(
+                "Room has reached its maximum participant limit.",
+                HttpStatus.FORBIDDEN,
+              );
+            }
+            console.log(`[getRoomToken] Room ${roomDocument._id} has space (DB: ${currentParticipants}/${roomDocument.maxParticipants}). Allowing access.`);
+          }
+        } else {
+          // LiveKit client not configured, rely solely on database session data
+          console.warn('[getRoomToken] LiveKit client not configured, relying solely on database session data for participant limit check.');
+          const session = await this.sessionModel.findOne({ roomId: roomDocument._id });
+          const currentParticipants = session ? session.participants.filter(p => p.isActive).length : 0;
+          console.log(`[getRoomToken] Database session active participants for room ${roomDocument._id}: ${currentParticipants}`);
+
+          if (currentParticipants >= roomDocument.maxParticipants) {
+            console.warn(`[getRoomToken] Room ${roomDocument._id} is full (DB: ${currentParticipants}/${roomDocument.maxParticipants}, LiveKit not configured). Denying access to non-creator.`);
+            throw new HttpException(
+              "Room has reached its maximum participant limit.",
+              HttpStatus.FORBIDDEN,
+            );
+          }
+          console.log(`[getRoomToken] Room ${roomDocument._id} has space (DB: ${currentParticipants}/${roomDocument.maxParticipants}, LiveKit not configured). Allowing access.`);
         }
       }
 
@@ -636,6 +808,10 @@ export class LivekitController {
   })
   @ApiQuery({ name: 'page', required: false, description: 'Page number (starts from 1)', example: 1 })
   @ApiQuery({ name: 'limit', required: false, description: 'Number of items per page', example: 10 })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by session status', enum: ['active', 'ended', 'cancelled', 'all'], example: 'all' })
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by room type', enum: ['public', 'private', 'all'], example: 'all' })
+  @ApiQuery({ name: 'paymentStatus', required: false, description: 'Filter by payment status', enum: ['paid', 'free', 'all'], example: 'all' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search in room name and description', example: 'coding session' })
   @ApiResponse({ status: 200, description: 'My session history', type: SessionHistoryResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseGuards(JwtAuthGuard)
@@ -648,162 +824,166 @@ export class LivekitController {
       // Validate and sanitize query parameters
       const page = Math.max(1, parseInt(query.page?.toString() || '1', 10));
       const limit = Math.min(100, Math.max(1, parseInt(query.limit?.toString() || '10', 10)));
+      const status = query.status || 'all';
+      const type = query.type || 'all';
+      const paymentStatus = query.paymentStatus || 'all';
+      const search = query.search?.trim();
       
       const userId = req.user?.sub;
       if (!userId) {
-        throw new HttpException(
-          'User ID not found in JWT payload',
-          HttpStatus.UNAUTHORIZED,
+        throw new UnauthorizedException('User ID not found in JWT payload');
+      }
+
+      // Build room query with filters
+      const roomQuery: any = {
+        $or: [
+          // Rooms where user participated
+          { _id: { $in: await this.getUserParticipatedRoomIds(userId) } },
+          // Rooms purchased by user (including cancelled ones)
+          { _id: { $in: await this.getUserPurchasedRoomIds(userId) } },
+          // Rooms created by user (only for cancelled/ended sessions)
+          { 
+            createdBy: new Types.ObjectId(userId),
+            $or: [
+              { cancelledAt: { $exists: true } }, // Cancelled rooms
+              { endedDate: { $exists: true } }   // Ended rooms
+            ]
+          }
+        ]
+      };
+
+      // Apply status filter
+      if (status === 'active') {
+        roomQuery.isActive = true;
+        roomQuery.cancelledAt = { $exists: false };
+      } else if (status === 'ended') {
+        roomQuery.endedDate = { $exists: true };
+        roomQuery.cancelledAt = { $exists: false };
+      } else if (status === 'cancelled') {
+        roomQuery.cancelledAt = { $exists: true };
+      } else if (status === 'all') {
+        // For 'all' status, don't filter by cancelledAt - show all rooms
+        // No additional filter needed
+      }
+
+      // Apply type filter
+      if (type === 'public') {
+        roomQuery.isPrivate = false;
+      } else if (type === 'private') {
+        roomQuery.isPrivate = true;
+      }
+
+      // Apply payment status filter
+      if (paymentStatus === 'paid') {
+        roomQuery.isPaid = true;
+      } else if (paymentStatus === 'free') {
+        roomQuery.$or = [
+          { isPaid: false },
+          { isPaid: { $exists: false } }
+        ];
+      }
+
+      // Get all rooms matching the filters
+      let allRooms = await this.roomModel.find(roomQuery)
+        .populate('createdBy', 'username firstName lastName email avatar')
+        .select('name description isPrivate isActive isPaid price currency createdBy createdAt updatedAt endedDate cancelledAt cancellationReason')
+        .sort({ updatedAt: -1 })
+        .lean();
+
+      // Apply search filter if provided
+      if (search && search.length > 0) {
+        const searchRegex = new RegExp(search, 'i'); // Case-insensitive search
+        allRooms = allRooms.filter(room => 
+          searchRegex.test(room.name) || 
+          searchRegex.test(room.description)
         );
       }
 
-      // Find all sessions where this user participated
-      const mySessions = await this.sessionModel.find({
-        'participants.userId': new Types.ObjectId(userId)
-      });
-
-      // Get unique room IDs from sessions, filtering out null/undefined values
-      const roomIds = [...new Set(mySessions
-        .filter(session => session.roomId) // Filter out sessions without roomId
-        .map(session => session.roomId)
-      )];
-
-      // Check if we have any valid room IDs
-      if (roomIds.length === 0) {
+      if (allRooms.length === 0) {
         return {
           mySessionHistory: [],
           totalRooms: 0,
           activeRooms: 0,
           endedRooms: 0,
+          cancelledRooms: 0,
           message: 'No session history found',
           pagination: {
-            page: Math.max(1, parseInt(query.page?.toString() || '1', 10)),
-            limit: Math.min(100, Math.max(1, parseInt(query.limit?.toString() || '10', 10))),
+            page,
+            limit,
             total: 0,
             totalPages: 0,
             hasNext: false,
             hasPrev: false
-          }
+          },
+          filters: await this.calculateSessionHistoryFilters(userId)
         };
       }
 
-      // Get ALL rooms (both active and ended) where user participated
-      if (roomIds.length === 0) {
-         
-         // If no sessions found, get rooms you created
-         const createdRooms = await this.roomModel.find({
-           createdBy: new Types.ObjectId(userId)
-         })
-         .populate('createdBy', 'username firstName lastName email avatar')
-         .select('name description isPrivate isActive createdBy createdAt updatedAt endedDate')
-         .sort({ updatedAt: -1 })
-         .lean();
-         
-         // Map created rooms to session history format
-         const sessionHistory = createdRooms.map(room => ({
-           roomId: room._id,
-           roomName: room.name,
-           roomDescription: room.description,
-           isPrivate: room.isPrivate,
-           isActive: room.isActive,
-           createdBy: room.createdBy,
-           createdAt: room.createdAt || new Date(),
-           endedAt: room.isActive ? null : (room.endedDate || room.updatedAt || new Date()),
-           duration: room.isActive ? null : ((room.endedDate || room.updatedAt || new Date()).getTime() - (room.createdAt || new Date()).getTime()),
-           totalTimeSpent: 0, // No participation data
-           joinCount: 0, // No participation data
-           lastJoined: null, // No participation data
-           status: room.isActive ? 'Active' : 'Ended',
-           note: 'Room created but not participated in'
-         }));
-         
-                        // Apply pagination to created rooms with validation
-         const total = sessionHistory.length;
-         const totalPages = Math.ceil(total / limit);
-         const skip = (page - 1) * limit;
-         
-         // Get paginated results
-         const paginatedHistory = sessionHistory.slice(skip, skip + limit);
-         
-         return {
-           mySessionHistory: paginatedHistory,
-           totalRooms: total,
-           activeRooms: sessionHistory.filter(room => room.isActive).length,
-           endedRooms: sessionHistory.filter(room => !room.isActive).length,
-           message: 'Your session history retrieved successfully (showing created rooms)',
-           pagination: {
-             page,
-             limit,
-             total,
-             totalPages,
-             hasNext: page < totalPages,
-             hasPrev: page > 1
-           }
-         };
-       }
-       
-       const participatedRooms = await this.roomModel.find({
-         _id: { $in: roomIds }
-       })
-       .populate('createdBy', 'username firstName lastName email avatar')
-       .select('name description isPrivate isActive createdBy createdAt updatedAt endedDate')
-       .sort({ updatedAt: -1 })
-       .lean(); // Convert to plain objects to avoid Mongoose document issues
+      // Get user participation data for all rooms
+      const mySessions = await this.sessionModel.find({
+        'participants.userId': new Types.ObjectId(userId)
+      });
 
-      // Map sessions to rooms with participation details
-      const sessionHistory = participatedRooms.map((room, index) => {
+      // Get user purchases for all rooms
+      const myPurchases = await this.meetingPurchaseModel.find({
+        userId: new Types.ObjectId(userId),
+        status: 'completed'
+      });
+
+      // Map rooms to session history format with participation details
+      const sessionHistory = await Promise.all(allRooms.map(async (room) => {
         try {
-          
-                     const roomSessions = mySessions.filter(session => {
-             try {
-               const matches = session.roomId && session.roomId.toString() === room._id.toString();
-               return matches;
-             } catch (filterError) {
-               return false;
-             }
-           });
-           
-           // Get user's participation details from this room
-           
-           const userParticipations = roomSessions.flatMap(session => {
-             try {
-               // Convert both to strings for comparison
-               const filtered = session.participants.filter(p => {
-                 const participantUserId = p.userId.toString();
-                 const currentUserId = userId.toString();
-                 const matches = participantUserId === currentUserId;
-                 return matches;
-               });
-               return filtered;
-             } catch (participationError) {
-               return [];
-             }
-           });
+          // Get user's participation details from this room
+          const roomSessions = mySessions.filter(session => 
+            session.roomId && session.roomId.toString() === room._id.toString()
+          );
 
-                     // Calculate total time spent in this room
-           const totalTimeSpent = userParticipations.reduce((total, participation) => {
-             try {
-               const joinedAt = participation.joinedAt;
-               // If participant is still active and room is active, use current time
-               // If participant left, use their leftAt time
-               // If room ended, use room's endedDate
-               let leftAt: Date;
-               if (participation.isActive && room.isActive) {
-                 leftAt = new Date(); // Still in session
-               } else if (participation.leftAt) {
-                 leftAt = participation.leftAt; // Participant left
-               } else if (room.endedDate) {
-                 leftAt = room.endedDate; // Room ended
-               } else {
-                 leftAt = room.updatedAt || new Date(); // Fallback
-               }
-               
-               const timeSpent = leftAt.getTime() - joinedAt.getTime();
-               return total + timeSpent;
-             } catch (timeError) {
-               return total;
-             }
-           }, 0);
+          const userParticipations = roomSessions.flatMap(session => 
+            session.participants.filter(p => p.userId.toString() === userId)
+          );
+
+          // Get user's purchase for this room
+          const userPurchase = myPurchases.find(purchase => 
+            purchase.roomId && purchase.roomId.toString() === room._id.toString()
+          );
+
+          // Calculate total time spent in this room
+          const totalTimeSpent = userParticipations.reduce((total, participation) => {
+            try {
+              const joinedAt = participation.joinedAt;
+              let leftAt: Date;
+              
+              if (participation.isActive && room.isActive) {
+                leftAt = new Date(); // Still in session
+              } else if (participation.leftAt) {
+                leftAt = participation.leftAt; // Participant left
+              } else if (room.endedDate) {
+                leftAt = room.endedDate; // Room ended
+              } else if (room.cancelledAt) {
+                leftAt = room.cancelledAt; // Room cancelled
+              } else {
+                leftAt = room.updatedAt || new Date(); // Fallback
+              }
+              
+              const timeSpent = leftAt.getTime() - joinedAt.getTime();
+              return total + Math.max(0, timeSpent); // Ensure non-negative
+            } catch (timeError) {
+              return total;
+            }
+          }, 0);
+
+          // Determine room status
+          let roomStatus = 'Active';
+          if (room.cancelledAt) {
+            roomStatus = 'Cancelled';
+          } else if (room.endedDate) {
+            roomStatus = 'Ended';
+          } else if (!room.isActive) {
+            roomStatus = 'Inactive';
+          }
+
+          // Get rating data for this room
+          const ratingData = await this.getRoomRatingData(room._id.toString(), userId);
 
           return {
             roomId: room._id,
@@ -811,66 +991,80 @@ export class LivekitController {
             roomDescription: room.description,
             isPrivate: room.isPrivate,
             isActive: room.isActive,
+            isPaid: room.isPaid || false,
+            price: room.price || 0,
+            currency: room.currency || 'USD',
             createdBy: room.createdBy,
             createdAt: room.createdAt || new Date(),
-            endedAt: room.isActive ? null : (room.endedDate || room.updatedAt || new Date()),
-            duration: room.isActive ? null : ((room.endedDate || room.updatedAt || new Date()).getTime() - (room.createdAt || new Date()).getTime()),
-                         totalTimeSpent: totalTimeSpent,
-             joinCount: userParticipations.length, // How many times user joined this room
-             activeParticipations: userParticipations.filter(p => p.isActive).length, // Currently active participations
-             lastJoined: userParticipations.length > 0 ? 
-             (() => {
-               try {
-                 // Get the most recent join time from active participations
-                 const activeParticipations = userParticipations.filter(p => p.isActive);
-                 if (activeParticipations.length > 0) {
-                   return new Date(Math.max(...activeParticipations.map(p => p.joinedAt.getTime())));
-                 } else {
-                   // If no active participations, get the most recent join time overall
-                   return new Date(Math.max(...userParticipations.map(p => p.joinedAt.getTime())));
-                 }
-               } catch (lastJoinedError) {
-                 console.warn(`⚠️ Error calculating lastJoined for room ${room._id}:`, lastJoinedError);
-                 return null;
-               }
-             })() : null,
-                         status: room.isActive ? 'Active' : 'Ended'
-           };
-           
+            endedAt: room.endedDate || null,
+            cancelledAt: room.cancelledAt || null,
+            cancellationReason: room.cancellationReason || null,
+            duration: room.endedDate ? 
+              (room.endedDate.getTime() - (room.createdAt || new Date()).getTime()) : 
+              (room.cancelledAt ? 
+                (room.cancelledAt.getTime() - (room.createdAt || new Date()).getTime()) : 
+                null),
+            totalTimeSpent: totalTimeSpent,
+            joinCount: userParticipations.length,
+            activeParticipations: userParticipations.filter(p => p.isActive).length,
+            lastJoined: userParticipations.length > 0 ? 
+              new Date(Math.max(...userParticipations.map(p => p.joinedAt.getTime()))) : 
+              null,
+            status: roomStatus,
+            note: this.getSessionHistoryNote(userParticipations.length, userPurchase, room.createdBy.toString() === userId),
+            averageRating: ratingData.averageRating,
+            ratingCount: ratingData.ratingCount,
+            userRating: ratingData.userRating,
+            isUserRated: ratingData.isUserRated
+          };
         } catch (roomError) {
-          // Return a basic room object if processing fails
+          console.error(`Error processing room ${room._id}:`, roomError);
           return {
             roomId: room._id,
             roomName: room.name || 'Unknown',
             roomDescription: room.description || 'No description available',
             isPrivate: room.isPrivate || false,
             isActive: room.isActive || false,
+            isPaid: room.isPaid || false,
+            price: room.price || 0,
+            currency: room.currency || 'USD',
             createdBy: room.createdBy || { username: 'Unknown', email: 'Unknown' },
             createdAt: room.createdAt || new Date(),
             endedAt: null,
+            cancelledAt: null,
+            cancellationReason: null,
             duration: null,
             totalTimeSpent: 0,
             joinCount: 0,
+            activeParticipations: 0,
             lastJoined: null,
             status: 'Error',
-            error: 'Failed to process room data'
+            error: 'Failed to process room data',
+            averageRating: undefined,
+            ratingCount: 0,
+            userRating: undefined,
+            isUserRated: false
           };
         }
-      });
+      }));
 
-      // Apply pagination with validation
+      // Apply pagination
       const total = sessionHistory.length;
       const totalPages = Math.ceil(total / limit);
       const skip = (page - 1) * limit;
-      
-      // Get paginated results
       const paginatedHistory = sessionHistory.slice(skip, skip + limit);
-      
-      const result = {
+
+      // Calculate statistics
+      const activeRooms = sessionHistory.filter(room => room.status === 'Active').length;
+      const endedRooms = sessionHistory.filter(room => room.status === 'Ended').length;
+      const cancelledRooms = sessionHistory.filter(room => room.status === 'Cancelled').length;
+
+      return {
         mySessionHistory: paginatedHistory,
         totalRooms: total,
-        activeRooms: sessionHistory.filter(room => room.isActive).length,
-        endedRooms: sessionHistory.filter(room => !room.isActive).length,
+        activeRooms,
+        endedRooms,
+        cancelledRooms,
         message: 'Your session history retrieved successfully',
         pagination: {
           page,
@@ -879,10 +1073,9 @@ export class LivekitController {
           totalPages,
           hasNext: page < totalPages,
           hasPrev: page > 1
-        }
+        },
+        filters: await this.calculateSessionHistoryFilters(userId)
       };
-
-      return result;
     } catch (error) {
       throw new HttpException(
         `Failed to get session history: ${error.message}`,
@@ -904,6 +1097,32 @@ export class LivekitController {
   @Get('rooms/:id')
   async getRoomById(@Param('id') id: string) {
     return await this.livekitService.findRoomById(id);
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get room purchasers (creator only)',
+    description: 'Get detailed list of all purchasers for a room with pagination. Only the room creator can access this information.',
+  })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)', type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, description: 'Number of purchasers per page (default: 10, max: 100)', type: Number, example: 10 })
+  @ApiResponse({ status: 200, description: 'Room purchasers retrieved successfully', type: RoomPurchasersResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Only room creator can view purchasers' })
+  @ApiResponse({ status: 404, description: 'Room not found' })
+  @UseGuards(JwtAuthGuard)
+  @Get('rooms/:id/purchasers')
+  async getRoomPurchasers(
+    @Param('id') id: string, 
+    @Req() req,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number
+  ) {
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new UnauthorizedException('User ID not found in JWT payload');
+    }
+    return await this.livekitService.getRoomPurchasers(id, userId, page, limit);
   }
 
   @ApiBearerAuth()
@@ -933,9 +1152,52 @@ export class LivekitController {
   ) {
     const userId = req.user?.sub;
     if (!userId) {
-      throw new Error('User ID not found in JWT payload');
+      throw new UnauthorizedException('User ID not found in JWT payload');
     }
-    return await this.livekitService.updateRoom(id, updateRoomDto, userId);
+    const result = await this.livekitService.updateRoom(id, updateRoomDto, userId);
+
+    // إذا كان النتيجة رسالة نجاح (يعني تم الإلغاء)، أرجعها كما هي
+    if (typeof result === 'object' && 'message' in result) {
+      return result;
+    }
+
+    // غير ذلك، أرجع الغرفة المحدثة
+    return result;
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Cancel room',
+    description: 'Cancel a room and refund all participants if applicable. Only the room creator can cancel.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Room cancelled successfully',
+    type: Object,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Only room creator can cancel',
+  })
+  @ApiResponse({ status: 404, description: 'Room not found' })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad Request - Cannot cancel room with completed purchases without refund',
+  })
+  @UseGuards(JwtAuthGuard)
+  @Put('rooms/:id/cancel')
+  async cancelRoom(
+    @Param('id') id: string,
+    @Req() req,
+    @Body() cancelData: { cancellationReason?: string }
+  ) {
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new UnauthorizedException('User ID not found in JWT payload');
+    }
+    await this.livekitService.cancelRoom(id, userId, cancelData.cancellationReason);
+    return { message: 'Room cancelled successfully' };
   }
 
   @ApiBearerAuth()
@@ -960,7 +1222,7 @@ export class LivekitController {
   async deleteRoom(@Param('id') id: string, @Req() req) {
     const userId = req.user?.sub;
     if (!userId) {
-      throw new Error('User ID not found in JWT payload');
+      throw new UnauthorizedException('User ID not found in JWT payload');
     }
     await this.livekitService.deleteRoom(id, userId);
     return { message: 'Room deleted successfully' };
@@ -983,7 +1245,7 @@ export class LivekitController {
   async getMyRooms(@Req() req) {
     const userId = req.user?.sub;
     if (!userId) {
-      throw new Error('User ID not found in JWT payload');
+      throw new UnauthorizedException('User ID not found in JWT payload');
     }
     return await this.livekitService.findRoomsByUser(userId);
   }
@@ -1006,9 +1268,35 @@ export class LivekitController {
   async getRoomSecretId(@Param('id') id: string, @Req() req) {
     const userId = req.user?.sub;
     if (!userId) {
-      throw new Error('User ID not found in JWT payload');
+      throw new UnauthorizedException('User ID not found in JWT payload');
     }
     return await this.livekitService.getRoomSecretId(id, userId);
+  }
+
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Join private room by ID',
+    description:
+      'Join a private room using its MongoDB ID. User must be invited or be the creator, and payment must be made if the room is paid.',
+  })
+  @ApiResponse({ status: 200, description: 'LiveKit access token and room details', type: Object })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Not invited, payment required, or room full' })
+  @ApiResponse({ status: 404, description: 'Room not found or inactive' })
+  @UseGuards(JwtAuthGuard)
+  @Post('rooms/join-private/:roomId')
+  async joinPrivateRoom(
+    @Param('roomId') roomId: string,
+    @Req() req,
+  ): Promise<any> { // Change return type to specific DTO later if needed
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new HttpException(
+        'User ID not found in JWT payload',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    return await this.livekitService.joinPrivateRoom(roomId, userId);
   }
 
   @ApiBearerAuth()
@@ -1017,6 +1305,7 @@ export class LivekitController {
     description:
       '⚠️ This module is still under development and may change in future releases.',
   })
+  @ApiQuery({ name: 'secretId', required: true, description: 'Room MongoDB ID' })
   @ApiResponse({ status: 200, description: 'Room details', type: RoomResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Room not found or inactive' })
@@ -1028,7 +1317,7 @@ export class LivekitController {
     if (!user) {
       throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
     }
-    const room = await this.livekitService.findRoomBySecretIdInternal(secretId);
+    const room = await this.livekitService.findRoomBySecretIdInternal(secretId, userId);
     if (
       room.isPrivate &&
       !room.invitedUsers.some((id) => id.toString() === userId)
@@ -1053,7 +1342,7 @@ export class LivekitController {
   @ApiResponse({ status: 404, description: 'Public room not found or inactive' })
   @ApiResponse({ status: 403, description: 'Room is private and requires invitation' })
   @UseGuards(JwtAuthGuard)
-  @Get('rooms/join-public/:roomId')
+  @Post('rooms/join-public/:roomId') // Changed to POST
   async joinPublicRoom(@Param('roomId') roomId: string, @Req() req) {
     const userId = req.user?.sub;
     const user = await this.userModel.findById(userId).select('email');
@@ -1062,7 +1351,7 @@ export class LivekitController {
     }
     
     // For public rooms, no invitation check is needed
-    const result = await this.livekitService.joinPublicRoomById(roomId);
+    const result = await this.livekitService.joinPublicRoomById(roomId, userId);
     
     return result;
   }
@@ -1570,7 +1859,7 @@ export class LivekitController {
                const notifications = participants.map(participant => ({
                  toUserId: participant.userId.toString(),
                  fromUserId: room.createdBy._id.toString(),
-                 content: `'s session "${room.name}" ended, please rate your experience.`,
+                 content: `Session "${room.name}" ended, please rate your experience.`,
                  type: 'RATING_REQUESTED' as any,
                  data: {
                    sessionId: (session._id as any).toString(),
@@ -1968,4 +2257,186 @@ export class LivekitController {
        { search, rating, sortBy }
      );
    }
+
+  // Helper method to get room IDs where user participated
+  private async getUserParticipatedRoomIds(userId: string): Promise<string[]> {
+    const mySessions = await this.sessionModel.find({
+      'participants.userId': new Types.ObjectId(userId)
+    });
+
+    const roomIds = [...new Set(mySessions
+      .filter(session => session.roomId)
+      .map(session => session.roomId!.toString())
+    )];
+
+    return roomIds;
+  }
+
+  // Helper method to get room IDs that user purchased
+  private async getUserPurchasedRoomIds(userId: string): Promise<string[]> {
+    const purchases = await this.meetingPurchaseModel.find({
+      userId: new Types.ObjectId(userId),
+      status: 'completed'
+    });
+
+    const roomIds = [...new Set(purchases
+      .filter(purchase => purchase.roomId)
+      .map(purchase => (purchase.roomId as Types.ObjectId).toString())
+    )];
+
+    return roomIds;
+  }
+
+  // Helper method to get appropriate note for session history
+  private getSessionHistoryNote(participationCount: number, userPurchase: any, isCreator: boolean): string | undefined {
+    if (participationCount > 0) {
+      return undefined; // User participated, no special note needed
+    }
+    
+    if (isCreator) {
+      return 'Room created by you';
+    }
+    
+    if (userPurchase) {
+      if (userPurchase.status === 'completed') {
+        return 'Purchased but not joined yet';
+      }
+      return 'Purchase pending';
+    }
+    
+    return 'No participation or purchase found';
+  }
+
+  // Helper method to calculate session history filters
+  private async calculateSessionHistoryFilters(userId: string): Promise<SessionHistoryFiltersDto> {
+    const userParticipatedRoomIds = await this.getUserParticipatedRoomIds(userId);
+    const userPurchasedRoomIds = await this.getUserPurchasedRoomIds(userId);
+    
+    const baseQuery = {
+      $or: [
+        { _id: { $in: userParticipatedRoomIds } },
+        { _id: { $in: userPurchasedRoomIds } },
+        // Rooms created by user (only for cancelled/ended sessions)
+        { 
+          createdBy: new Types.ObjectId(userId),
+          $or: [
+            { cancelledAt: { $exists: true } }, // Cancelled rooms
+            { endedDate: { $exists: true } }   // Ended rooms
+          ]
+        }
+      ]
+    };
+
+    const [
+      totalActiveSessions,
+      totalEndedSessions,
+      totalCancelledSessions,
+      totalPublicSessions,
+      totalPrivateSessions,
+      totalPaidSessions,
+      totalFreeSessions
+    ] = await Promise.all([
+      // Active sessions
+      this.roomModel.countDocuments({
+        ...baseQuery,
+        isActive: true,
+        cancelledAt: { $exists: false }
+      }),
+      
+      // Ended sessions
+      this.roomModel.countDocuments({
+        ...baseQuery,
+        endedDate: { $exists: true },
+        cancelledAt: { $exists: false }
+      }),
+      
+      // Cancelled sessions
+      this.roomModel.countDocuments({
+        ...baseQuery,
+        cancelledAt: { $exists: true }
+      }),
+      
+      // Public sessions
+      this.roomModel.countDocuments({
+        ...baseQuery,
+        isPrivate: false
+      }),
+      
+      // Private sessions
+      this.roomModel.countDocuments({
+        ...baseQuery,
+        isPrivate: true
+      }),
+      
+      // Paid sessions
+      this.roomModel.countDocuments({
+        ...baseQuery,
+        isPaid: true
+      }),
+      
+      // Free sessions
+      this.roomModel.countDocuments({
+        ...baseQuery,
+        $or: [
+          { isPaid: false },
+          { isPaid: { $exists: false } }
+        ]
+      })
+    ]);
+
+    return {
+      availableStatuses: ['active', 'ended', 'cancelled', 'all'],
+      availableTypes: ['public', 'private', 'all'],
+      availablePaymentStatuses: ['paid', 'free', 'all'],
+      totalActiveSessions,
+      totalEndedSessions,
+      totalCancelledSessions,
+      totalPublicSessions,
+      totalPrivateSessions,
+      totalPaidSessions,
+      totalFreeSessions
+    };
+  }
+
+  // Helper method to get rating data for a room
+  private async getRoomRatingData(roomId: string, userId: string): Promise<{
+    averageRating?: number;
+    ratingCount: number;
+    userRating?: number;
+    isUserRated: boolean;
+  }> {
+    try {
+      // Get all ratings for this room
+      const ratings = await this.ratingModel.find({ roomId: new Types.ObjectId(roomId) });
+      
+      if (ratings.length === 0) {
+        return {
+          ratingCount: 0,
+          isUserRated: false
+        };
+      }
+
+      // Calculate average rating
+      const totalRating = ratings.reduce((sum, rating) => sum + rating.overallRating, 0);
+      const averageRating = Math.round((totalRating / ratings.length) * 10) / 10; // Round to 1 decimal place
+
+      // Check if current user has rated this room
+      const userRating = ratings.find(rating => rating.raterId.toString() === userId);
+      const isUserRated = !!userRating;
+
+      return {
+        averageRating,
+        ratingCount: ratings.length,
+        userRating: userRating?.overallRating,
+        isUserRated
+      };
+    } catch (error) {
+      console.error(`Error getting rating data for room ${roomId}:`, error);
+      return {
+        ratingCount: 0,
+        isUserRated: false
+      };
+    }
+  }
+
 }

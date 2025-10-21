@@ -117,9 +117,14 @@ export class CommentsService {
     highlightId?: string,
     limit = 10,
     offset = 0,
-  ): Promise<{ comments: any[]; total: number; hasMore: boolean }> {
+  ): Promise<{ comments: any[]; total: number; totalCommentsCount: number; hasMore: boolean }> {
     const filter = { postId: new Types.ObjectId(postId), parentCommentId: null } as any;
-    const total = await this.commentModel.countDocuments(filter);
+    const totalCommentsCount = await this.commentModel.countDocuments(filter);
+    
+    // ✅ حساب إجمالي كل شيء (تعليقات + ردود)
+    const total = await this.commentModel.countDocuments({
+      postId: new Types.ObjectId(postId)
+    });
 
     // Build base query excluding highlighted (for stable ordering)
     const excludeHighlighted = highlightId
@@ -168,8 +173,8 @@ export class CommentsService {
     const commentsWithCounts = await this.addRepliesCountToList(comments);
 
     const safeOffset = Math.max(0, offset);
-    const hasMore = safeOffset + Math.max(1, limit) < total;
-    return { comments: commentsWithCounts, total, hasMore };
+    const hasMore = safeOffset + Math.max(1, limit) < totalCommentsCount;
+    return { comments: commentsWithCounts, total, totalCommentsCount, hasMore };
   }
 
   // Get replies with a highlighted reply first

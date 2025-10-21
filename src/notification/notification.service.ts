@@ -40,7 +40,10 @@ export class NotificationService {
 
   async create(dto: CreateNotificationDto) {
     dto.toUserId = extractObjectId(dto.toUserId);
-    dto.fromUserId = extractObjectId(dto.fromUserId);
+    // لا نحول fromUserId إذا كان null
+    if (dto.fromUserId) {
+      dto.fromUserId = extractObjectId(dto.fromUserId);
+    }
     // Always store postId as a string/ObjectId, never as a full object
     if (dto.data && dto.data.postId) {
       dto.data.postId = extractObjectId(dto.data.postId);
@@ -73,7 +76,11 @@ export class NotificationService {
         // Populate and return as in the new notification case
         const populatedNotification = await this.notificationModel.findById(existing._id)
           .populate('toUserId', 'username firstName lastName avatar')
-          .populate('fromUserId', 'username firstName lastName avatar')
+          .populate({
+            path: 'fromUserId',
+            model: 'User',
+            select: 'username firstName lastName avatar'
+          })
           .populate({
             path: 'data.postId',
             model: 'Post',
@@ -143,7 +150,11 @@ export class NotificationService {
         // Populate and return as in the new notification case
         const populatedNotification = await this.notificationModel.findById(existing._id)
           .populate('toUserId', 'username firstName lastName avatar')
-          .populate('fromUserId', 'username firstName lastName avatar')
+          .populate({
+            path: 'fromUserId',
+            model: 'User',
+            select: 'username firstName lastName avatar'
+          })
           .populate({
             path: 'data.postId',
             model: 'Post',
@@ -208,7 +219,11 @@ export class NotificationService {
     // جلب الإشعار المحدث مع populate
     const populatedNotification = await this.notificationModel.findById(saved._id)
       .populate('toUserId', 'username firstName lastName avatar')
-      .populate('fromUserId', 'username firstName lastName avatar')
+      .populate({
+        path: 'fromUserId',
+        model: 'User',
+        select: 'username firstName lastName avatar'
+      })
       .populate({
         path: 'data.postId',
         model: 'Post',
@@ -269,67 +284,113 @@ export class NotificationService {
     return saved;
   }
 
-  findByUser(toUserId: string) {
-    return this.notificationModel.find({ toUserId })
-      .populate('toUserId', 'username firstName lastName avatar')
-      .populate('fromUserId', 'username firstName lastName avatar')
-      .populate({
-        path: 'data.postId',
-        model: 'Post',
-        select: 'text code codeLang image video tags reactions createdAt updatedAt',
-        populate: {
-          path: 'createdBy',
+  async findByUser(
+    toUserId: string,
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
+    isRead?: string,
+  ) {
+    const query: any = { toUserId };
+    if (search) {
+      query.content = { $regex: search, $options: 'i' };
+    }
+    if (isRead !== undefined) {
+      query.isRead = isRead === 'true'; // Convert string to boolean
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [notifications, totalDocs, totalUnreadCount] = await Promise.all([
+      this.notificationModel
+        .find(query)
+        .populate('toUserId', 'username firstName lastName avatar')
+        .populate({
+          path: 'fromUserId',
           model: 'User',
-          select: 'username firstName lastName avatar'
-        }
-      })
-      .populate({
-        path: 'data.commentId',
-        model: 'Comment',
-        select: 'text code codeLang postId parentCommentId reactions createdAt updatedAt',
-        populate: [
-          {
+          select: 'username firstName lastName avatar',
+        })
+        .populate({
+          path: 'data.postId',
+          model: 'Post',
+          select:
+            'text code codeLang image video tags reactions createdAt updatedAt',
+          populate: {
             path: 'createdBy',
             model: 'User',
-            select: 'username firstName lastName avatar'
+            select: 'username firstName lastName avatar',
           },
-          {
-            path: 'postId',
-            model: 'Post',
-            select: 'text code codeLang image video tags reactions createdAt updatedAt',
-            populate: {
+        })
+        .populate({
+          path: 'data.commentId',
+          model: 'Comment',
+          select:
+            'text code codeLang postId parentCommentId reactions createdAt updatedAt',
+          populate: [
+            {
               path: 'createdBy',
               model: 'User',
-              select: 'username firstName lastName avatar'
-            }
-          }
-        ]
-      })
-      .sort({ createdAt: -1 })
-      .lean()
-      .exec()
-      .then(notifications => {
-        // تحويل البيانات لتكون في الشكل المطلوب
-        return notifications.map(notification => {
-          const result = { ...notification };
-          
-          // إذا كان هناك postId وتم populate له، انسخ البيانات إلى data.post
-          if (result.data && result.data.postId && typeof result.data.postId === 'object') {
-            const postData = result.data.postId as any;
-            result.data.post = postData;
-            result.data.postId = postData._id ? postData._id.toString() : '';
-          }
-          
-          // إذا كان هناك commentId وتم populate له، انسخ البيانات إلى data.comment
-          if (result.data && result.data.commentId && typeof result.data.commentId === 'object') {
-            const commentData = result.data.commentId as any;
-            result.data.comment = commentData;
-            result.data.commentId = commentData._id ? commentData._id.toString() : '';
-          }
-          
-          return result;
-        });
-      });
+              select: 'username firstName lastName avatar',
+            },
+            {
+              path: 'postId',
+              model: 'Post',
+              select:
+                'text code codeLang image video tags reactions createdAt updatedAt',
+              populate: {
+                path: 'createdBy',
+                model: 'User',
+                select: 'username firstName lastName avatar',
+              },
+            },
+          ],
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.notificationModel.countDocuments(query).exec(),
+      this.notificationModel.countDocuments({ toUserId, isRead: false }).exec(),
+    ]);
+
+    const totalPages = Math.ceil(totalDocs / limit);
+    const totalReadCount = totalDocs - totalUnreadCount;
+
+    const formattedNotifications = notifications.map((notification) => {
+      const result = { ...notification };
+
+      if (
+        result.data &&
+        result.data.postId &&
+        typeof result.data.postId === 'object'
+      ) {
+        const postData = result.data.postId as any;
+        result.data.post = postData;
+        result.data.postId = postData._id ? postData._id.toString() : '';
+      }
+
+      if (
+        result.data &&
+        result.data.commentId &&
+        typeof result.data.commentId === 'object'
+      ) {
+        const commentData = result.data.commentId as any;
+        result.data.comment = commentData;
+        result.data.commentId = commentData._id ? commentData._id.toString() : '';
+      }
+
+      return result;
+    });
+
+    return {
+      notifications: formattedNotifications,
+      totalPages,
+      currentPage: page,
+      totalUnreadCount,
+      totalNotificationsCount: totalDocs,
+      totalReadCount,
+    };
   }
 
     async markAsRead(notificationId: string) {
@@ -338,7 +399,11 @@ export class NotificationService {
       { isRead: true },
       { new: true },
     ).populate('toUserId', 'username firstName lastName avatar')
-     .populate('fromUserId', 'username firstName lastName avatar')
+     .populate({
+       path: 'fromUserId',
+       model: 'User',
+       select: 'username firstName lastName avatar'
+     })
      .populate({
        path: 'data.postId',
        model: 'Post',
@@ -397,16 +462,36 @@ export class NotificationService {
     return result;
   }
 
+  async deleteNotification(notificationId: string): Promise<any> {
+    return this.notificationModel.findByIdAndDelete(notificationId).exec();
+  }
+
   async addNotifications(notifications: CreateNotificationDto[]) {
     try {
-      const created = await this.notificationModel.insertMany(notifications);
+      // تنظيف البيانات قبل الإدراج
+      const cleanedNotifications = notifications.map(notification => {
+        const cleaned = { ...notification };
+        cleaned.toUserId = extractObjectId(cleaned.toUserId);
+        // لا نحول fromUserId إذا كان null
+        if (cleaned.fromUserId) {
+          cleaned.fromUserId = extractObjectId(cleaned.fromUserId);
+        }
+        return cleaned;
+      });
+      
+      const created = await this.notificationModel.insertMany(cleanedNotifications);
       
       // جلب الإشعارات المحدثة مع populate
       const populatedNotifications = await this.notificationModel.find({
         _id: { $in: created.map(n => n._id) }
       })
       .populate('toUserId', 'username firstName lastName avatar')
-      .populate('fromUserId', 'username firstName lastName avatar')
+      .populate({
+        path: 'fromUserId',
+        model: 'User',
+        select: 'username firstName lastName avatar',
+        match: { _id: { $exists: true, $ne: null } } // فقط إذا كان fromUserId موجود وليس null
+      })
       .populate({
         path: 'data.postId',
         model: 'Post',
